@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from base import BaseModel
 
 
-
-class MatrixFactorization:
+class MatrixFactorization(BaseModel):
     """
     Factorización matricial básica para ratings explícitos usando SGD.
 
@@ -36,7 +36,10 @@ class MatrixFactorization:
         shuffle=True,
         clip_range=None,
         verbose=True,
+        name=None
     ):
+        super().__init__(name=name, clip_range=clip_range)
+
         self.n_factors = n_factors
         self.lr = lr
         self.reg = reg
@@ -45,15 +48,12 @@ class MatrixFactorization:
         self.init_std = init_std
         self.random_state = random_state
         self.shuffle = shuffle
-        self.clip_range = clip_range
         self.verbose = verbose
 
-        self.is_fitted_ = False
-
+    # =========================
+    # FIT
+    # =========================
     def fit(self, df):
-        """
-        df: DataFrame con columnas ['user', 'item', 'rating']
-        """
         required_cols = {"user", "item", "rating"}
         missing = required_cols - set(df.columns)
         if missing:
@@ -61,7 +61,7 @@ class MatrixFactorization:
 
         df = df.copy()
 
-        # Mapear ids externos a índices internos
+        # Mapear ids
         self.user_ids_ = df["user"].unique()
         self.item_ids_ = df["item"].unique()
 
@@ -78,6 +78,7 @@ class MatrixFactorization:
         self.n_items_ = len(self.item_ids_)
 
         ratings = df[["u_idx", "i_idx", "rating"]].to_numpy()
+
         rng = np.random.default_rng(self.random_state)
 
         # Media global
@@ -88,16 +89,20 @@ class MatrixFactorization:
         self.Q_ = rng.normal(0, self.init_std, size=(self.n_items_, self.n_factors))
 
         # Sesgos
-        self.user_bias_ = np.zeros(self.n_users_, dtype=float)
-        self.item_bias_ = np.zeros(self.n_items_, dtype=float)
+        self.user_bias_ = np.zeros(self.n_users_)
+        self.item_bias_ = np.zeros(self.n_items_)
 
         self.train_history_ = []
 
+        # =========================
+        # SGD
+        # =========================
         for epoch in range(self.n_epochs):
+
             if self.shuffle:
                 rng.shuffle(ratings)
 
-            se = 0.0  # squared error acumulado
+            se = 0.0
 
             for u, i, r in ratings:
                 u = int(u)
@@ -109,16 +114,15 @@ class MatrixFactorization:
 
                 se += err ** 2
 
-                # Copias para update consistente
                 pu = self.P_[u].copy()
                 qi = self.Q_[i].copy()
 
-                # Sesgos
+                # biases
                 if self.use_bias:
                     self.user_bias_[u] += self.lr * (err - self.reg * self.user_bias_[u])
                     self.item_bias_[i] += self.lr * (err - self.reg * self.item_bias_[i])
 
-                # Factores latentes
+                # factors
                 self.P_[u] += self.lr * (err * qi - self.reg * pu)
                 self.Q_[i] += self.lr * (err * pu - self.reg * qi)
 
@@ -126,11 +130,14 @@ class MatrixFactorization:
             self.train_history_.append(rmse)
 
             if self.verbose:
-                print(f"Epoch {epoch+1:03d}/{self.n_epochs} - RMSE train: {rmse:.4f}")
+                print(f"[{self.name}] Epoch {epoch+1}/{self.n_epochs} - RMSE: {rmse:.4f}")
 
         self.is_fitted_ = True
         return self
 
+    # =========================
+    # PREDICCIÓN INTERNA
+    # =========================
     def _predict_idx(self, u_idx, i_idx):
         pred = np.dot(self.P_[u_idx], self.Q_[i_idx])
 
@@ -139,94 +146,47 @@ class MatrixFactorization:
             pred += self.user_bias_[u_idx]
             pred += self.item_bias_[i_idx]
 
-        if self.clip_range is not None:
-            pred = np.clip(pred, self.clip_range[0], self.clip_range[1])
+        return self._clip(pred)
 
-        return pred
-
+    # =========================
+    # API PÚBLICA
+    # =========================
     def predict(self, user, item):
-        """
-        Predicción para ids externos.
-        Manejo básico de cold start.
-        """
-        if not self.is_fitted_:
-            raise RuntimeError("El modelo no está entrenado. Llama antes a fit().")
+        self._check_fitted()
 
         user_known = user in self.user_to_idx_
         item_known = item in self.item_to_idx_
 
-        # Casos cold-start
         if not user_known and not item_known:
             pred = self.global_mean_
+
         elif not user_known:
             i = self.item_to_idx_[item]
-            pred = self.global_mean_ + self.item_bias_[i] if self.use_bias else self.global_mean_
+            pred = self.global_mean_ + self.item_bias_[i]
+
         elif not item_known:
             u = self.user_to_idx_[user]
-            pred = self.global_mean_ + self.user_bias_[u] if self.use_bias else self.global_mean_
+            pred = self.global_mean_ + self.user_bias_[u]
+
         else:
             u = self.user_to_idx_[user]
             i = self.item_to_idx_[item]
             pred = self._predict_idx(u, i)
 
-        if self.clip_range is not None:
-            pred = np.clip(pred, self.clip_range[0], self.clip_range[1])
+        return float(self._clip(pred))
 
-        return float(pred)
-
-    def predict_df(self, df):
-        """
-        Devuelve predicciones para un DataFrame con columnas ['user', 'item'].
-        """
-        if not {"user", "item"}.issubset(df.columns):
-            raise ValueError("El DataFrame debe tener columnas ['user', 'item'].")
-
-        out = df.copy()
-        out["prediction"] = [self.predict(u, i) for u, i in zip(out["user"], out["item"])]
-        return out
-
-    def rmse(self, df):
-        """
-        Calcula RMSE sobre un DataFrame con ['user', 'item', 'rating'].
-        """
-        if not {"user", "item", "rating"}.issubset(df.columns):
-            raise ValueError("El DataFrame debe tener columnas ['user', 'item', 'rating'].")
-
-        preds = np.array([self.predict(u, i) for u, i in zip(df["user"], df["item"])], dtype=float)
-        y_true = df["rating"].to_numpy(dtype=float)
-        return float(np.sqrt(np.mean((y_true - preds) ** 2)))
-
-    def recommend(self, user, known_df, top_k=10):
-        """
-        Recomienda ítems no vistos para un usuario.
-
-        known_df: DataFrame original de entrenamiento con ['user', 'item', 'rating']
-        """
-        if not self.is_fitted_:
-            raise RuntimeError("El modelo no está entrenado.")
-
-        if user not in self.user_to_idx_:
-            raise ValueError("Usuario desconocido; este método no maneja bien cold start de recomendación.")
-
-        seen_items = set(known_df.loc[known_df["user"] == user, "item"].unique())
-        candidate_items = [item for item in self.item_ids_ if item not in seen_items]
-
-        scores = [(item, self.predict(user, item)) for item in candidate_items]
-        scores.sort(key=lambda x: x[1], reverse=True)
-
-        return pd.DataFrame(scores[:top_k], columns=["item", "score"])
-
+    # =========================
+    # VISUALIZACIÓN
+    # =========================
     def plot_training(self):
-        """
-        Plotea la evolución del RMSE durante el entrenamiento.
-        """
-        if not hasattr(self, "train_history_") or len(self.train_history_) == 0:
-            raise ValueError("No hay historial de entrenamiento. Ejecuta fit() primero.")
+        self._check_fitted()
 
+        if len(self.train_history_) == 0:
+            raise ValueError("No hay historial de entrenamiento.")
 
         plt.figure()
         plt.plot(self.train_history_, marker='o')
-        plt.title("Training RMSE")
+        plt.title(f"{self.name} - Training RMSE")
         plt.xlabel("Epoch")
         plt.ylabel("RMSE")
         plt.grid(True)
