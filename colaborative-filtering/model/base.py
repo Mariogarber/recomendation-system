@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 import numpy as np
-import pandas as pd
 
 
 class BaseModel(ABC):
@@ -38,7 +37,7 @@ class BaseModel(ABC):
     # =========================
     # MÉTODOS COMUNES (DEFAULT)
     # =========================
-    def predict_df(self, df):
+    def predict_df(self, df, round_predictions=False):
         """
         Predicciones en batch.
         """
@@ -51,6 +50,8 @@ class BaseModel(ABC):
 
         out = df.copy()
         out["prediction"] = preds
+        if round_predictions:
+            out["prediction"] = out["prediction"].round()
         return out
 
     def rmse(self, df):
@@ -67,10 +68,10 @@ class BaseModel(ABC):
 
         return float(np.sqrt(np.mean((y_true[mask] - y_pred[mask]) ** 2)))
 
-    def mae(self, df):
+    def mae(self, df, round_predictions=False):
         self._check_fitted()
 
-        pred_df = self.predict_df(df)
+        pred_df = self.predict_df(df, round_predictions=round_predictions)
 
         y_true = pred_df["rating"].to_numpy(dtype=float)
         y_pred = pred_df["prediction"].to_numpy(dtype=float)

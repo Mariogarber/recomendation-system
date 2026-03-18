@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from scipy.optimize import minimize
 from sklearn.linear_model import Ridge
 
@@ -128,10 +127,12 @@ class RatingEnsemble:
         preds = self._base_predictions_one(user, item)
         return self._combine_row(preds)
 
-    def predict_df(self, df):
+    def predict_df(self, df, round_predictions=False):
         preds = [self.predict(u, i) for u, i in zip(df["user"], df["item"])]
         out = df.copy()
         out["prediction"] = preds
+        if round_predictions:
+            out["prediction"] = out["prediction"].round()
         return out
 
     def rmse(self, df):
@@ -148,11 +149,11 @@ class RatingEnsemble:
 
         return float(np.sqrt(np.mean((y_true[mask] - y_pred[mask]) ** 2)))
 
-    def mae(self, df):
+    def mae(self, df, round_predictions=False):
         if "rating" not in df.columns:
             raise ValueError("El DataFrame debe incluir la columna 'rating'.")
 
-        pred_df = self.predict_df(df)
+        pred_df = self.predict_df(df, round_predictions=round_predictions)
         y_true = pred_df["rating"].to_numpy(dtype=float)
         y_pred = pred_df["prediction"].to_numpy(dtype=float)
 
