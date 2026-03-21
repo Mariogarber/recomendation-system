@@ -12,6 +12,8 @@ class Predictor:
         self.save_path = save_path
         self.round_predictions = round_predictions
 
+        self.errors = 0
+
     def load_test_from_csv(self):
         """
         Carga un CSV con columnas 'user', 'item' y 'prediction' y devuelve un DataFrame.
@@ -34,6 +36,7 @@ class Predictor:
                 p = model.predict(u, i)
             except Exception:
                 p = 7.0  # Valor por defecto en caso de error
+                self.errors += 1
 
             if self.round_predictions:
                 p = round(p)
@@ -45,4 +48,5 @@ class Predictor:
         predictions = self.compute_predictions(model, test_df)
         solution_df = pd.DataFrame({"ID": ids, "rating": predictions})
         solution_df.to_csv(self.save_path, index=False)
+        print(f"Predictions saved to {self.save_path}. Number of errors: {self.errors}")
         return solution_df
