@@ -1,6 +1,12 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from .base import BaseModel
+
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from sklearn.linear_model import Ridge, Lasso, ElasticNet
+from sklearn.utils.validation import check_is_fitted
 
 
 class MatrixFactorization(BaseModel):
@@ -109,7 +115,7 @@ class MatrixFactorization(BaseModel):
                 r = float(r)
 
                 pred = self._predict_idx(u, i)
-                err = r - pred
+                err = np.clip(r - pred, -100, 100)  # Evitar errores extremos
 
                 se += err ** 2
 
@@ -124,6 +130,9 @@ class MatrixFactorization(BaseModel):
                 # factors
                 self.P_[u] += self.lr * (err * qi - self.reg * pu)
                 self.Q_[i] += self.lr * (err * pu - self.reg * qi)
+
+                self.P_[u] = np.clip(self.P_[u], -10, 10)
+                self.Q_[i] = np.clip(self.Q_[i], -10, 10)
 
             rmse = np.sqrt(se / len(ratings))
             self.train_history_.append(rmse)
@@ -190,3 +199,79 @@ class MatrixFactorization(BaseModel):
         plt.ylabel("RMSE")
         plt.grid(True)
         plt.show()
+        
+
+class PMFRegressor(BaseModel):
+    """"
+    Este modelo aprovecha las características latentes aprendidas por un modelo de 
+    factorización matricial (MatrixFactorization) para entrenar un regresor 
+    (por ejemplo, RandomForestRegressor) que predice ratings.
+    """
+
+    def __init__(self, pmf: MatrixFactorization, model: str | RandomForestRegressor | SVR | Ridge | Lasso | ElasticNet, name=None, clip_range=None):
+        super().__init__(name, clip_range)
+        self.pmf = pmf
+        self.regressor = self._parse_model(model)
+        try:
+            check_is_fitted(model)
+            self.is_fitted_ = True
+        except Exception:
+            self.is_fitted_ = False
+
+    def _parse_model(self, model):
+        if isinstance(model, str):
+            model = model.lower()
+            if model == "randomforest":
+                return RandomForestRegressor(random_state=42)
+            elif model == "svr":
+                return SVR()
+            elif model == "ridge":
+                return Ridge(random_state=42)
+            elif model == "lasso":
+                return Lasso(random_state=42)
+            elif model == "elasticnet":
+                return ElasticNet(random_state=42)
+            else:
+                raise ValueError(f"Modelo desconocido: {model}")
+        elif isinstance(model, (RandomForestRegressor, SVR, Ridge, Lasso, ElasticNet)):
+            return model
+        else:
+            raise ValueError("El modelo debe ser un string o una instancia de un regresor compatible.")
+
+    def _build_feature_matrix(self, df: pd.DataFrame):
+        required_cols = {"user", "item", "rating"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(f"Faltan columnas requeridas: {missing}")
+        
+        df = df.copy()
+        df["u_idx"] = df["user"].map(self.pmf.user_to_idx_)
+        df["i_idx"] = df["item"].map(self.pmf.item_to_idx_)
+        df = df.dropna(subset=["u_idx", "i_idx"])
+
+        df["u_idx"] = df["u_idx"].astype(int)
+        df["i_idx"] = df["i_idx"].astype(int)
+        X = np.hstack([self.pmf.P_[df["u_idx"]], self.pmf.Q_[df["i_idx"]]])
+        y = df["rating"].to_numpy()
+        return X, y
+
+    def fit(self, df: pd.DataFrame):
+        X, y = self._build_feature_matrix(df)
+        self.regressor.fit(X, y)
+        self.is_fitted_ = True
+        return self
+        
+    def predict(self, user, item):
+        user_known = user in self.pmf.user_to_idx_
+        item_known = item in self.pmf.item_to_idx_
+
+        if not user_known or not item_known:
+            pred = self.pmf.predict(user, item)
+        else:
+            u_idx = self.pmf.user_to_idx_[user]
+            i_idx = self.pmf.item_to_idx_[item]
+            features = np.hstack([self.pmf.P_[u_idx], self.pmf.Q_[i_idx]]).reshape(1, -1)
+            pred = self.regressor.predict(features)[0]
+
+        return float(self._clip(pred))
+    
