@@ -208,25 +208,25 @@ class PMFRegressor(BaseModel):
     (por ejemplo, RandomForestRegressor) que predice ratings.
     """
 
-    def __init__(self, pmf: MatrixFactorization, model: str | RandomForestRegressor | SVR | Ridge | Lasso | ElasticNet, name=None, clip_range=None):
+    def __init__(self, pmf: MatrixFactorization, model: str | RandomForestRegressor | SVR | Ridge | Lasso | ElasticNet, name=None, clip_range=None, n_jobs=16):
         super().__init__(name, clip_range)
         self.pmf = pmf
-        self.regressor = self._parse_model(model)
+        self.regressor = self._parse_model(model, n_jobs)
         try:
             check_is_fitted(model)
             self.is_fitted_ = True
         except Exception:
             self.is_fitted_ = False
 
-    def _parse_model(self, model):
+    def _parse_model(self, model, n_jobs=16):
         if isinstance(model, str):
             model = model.lower()
             if model == "randomforest":
-                return RandomForestRegressor(random_state=42)
+                return RandomForestRegressor(random_state=42, n_jobs=n_jobs)
             elif model == "svr":
                 return SVR()
             elif model == "ridge":
-                return Ridge(random_state=42)
+                return Ridge(random_state=42,)
             elif model == "lasso":
                 return Lasso(random_state=42)
             elif model == "elasticnet":
