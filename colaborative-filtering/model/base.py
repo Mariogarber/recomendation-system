@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
-
+import joblib
 
 class BaseModel(ABC):
     """
@@ -96,3 +96,15 @@ class BaseModel(ABC):
 
     def __repr__(self):
         return f"{self.name}()"
+    
+    # =========================
+    # SAVE AND LOAD
+    # =========================
+
+    def save(self, filepath):
+        joblib.dump(self, filepath)
+
+    @staticmethod
+    def load(filepath):
+        # Cargar un modelo desde un archivo
+        return joblib.load(filepath)
