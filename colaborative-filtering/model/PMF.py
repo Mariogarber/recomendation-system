@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+from surprise import Dataset, Reader, NMF
+
 from .base import BaseModel
 
 from sklearn.ensemble import RandomForestRegressor
@@ -274,4 +277,300 @@ class PMFRegressor(BaseModel):
             pred = self.regressor.predict(features)[0]
 
         return float(self._clip(pred))
-    
+
+
+class SurpriseNMFModel(BaseModel):
+    """
+    Wrapper de Surprise NMF compatible con la API de BaseModel.
+
+    Requisitos de entrada en fit:
+        df con columnas ['user', 'item', 'rating']
+
+    API heredada:
+        - fit(df)
+        - predict(user, item)
+
+    Extras:
+        - predict_batch(df)
+        - recommend(user, top_k=10, exclude_seen=True)
+        - get_user_embedding(user)
+        - get_item_embedding(item)
+        - get_user_bias(user)
+        - get_item_bias(item)
+        - explain_prediction(user, item)
+
+    Notas:
+        - NMF de Surprise usa factores no negativos.
+        - Si biased=False:
+              pred = <p_u, q_i>
+        - Si biased=True:
+              pred = mu + bu + bi + <p_u, q_i>
+        - Para user/item desconocido, Surprise resuelve de forma robusta vía su API de predict.
+    """
+
+    def __init__(
+        self,
+        n_factors=15,
+        n_epochs=50,
+        biased=True,
+        reg_pu=0.06,
+        reg_qi=0.06,
+        reg_bu=0.02,
+        reg_bi=0.02,
+        lr_bu=0.005,
+        lr_bi=0.005,
+        init_low=0.0,
+        init_high=1.0,
+        random_state=42,
+        verbose=True,
+        rating_scale=(1, 10),
+        clip_range=None,
+        name=None,
+    ):
+        super().__init__(name=name, clip_range=clip_range)
+
+        self.n_factors = n_factors
+        self.n_epochs = n_epochs
+        self.biased = biased
+        self.reg_pu = reg_pu
+        self.reg_qi = reg_qi
+        self.reg_bu = reg_bu
+        self.reg_bi = reg_bi
+        self.lr_bu = lr_bu
+        self.lr_bi = lr_bi
+        self.init_low = init_low
+        self.init_high = init_high
+        self.random_state = random_state
+        self.verbose = verbose
+        self.rating_scale = rating_scale
+
+        # Internos
+        self.algo_ = None
+        self.trainset_ = None
+        self.global_mean_ = None
+
+        self.users_ = None
+        self.items_ = None
+        self.user_seen_items_ = None
+
+    # =========================
+    # Helpers internos
+    # =========================
+    def _validate_df(self, df: pd.DataFrame):
+        required_cols = {"user", "item", "rating"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"El DataFrame debe contener las columnas {required_cols}. "
+                f"Faltan: {missing}"
+            )
+        if len(df) == 0:
+            raise ValueError("El DataFrame de entrenamiento está vacío.")
+
+    def _clip(self, value: float) -> float:
+        if self.clip_range is None:
+            return float(value)
+        lo, hi = self.clip_range
+        return float(np.clip(value, lo, hi))
+
+    def _build_surprise_dataset(self, df: pd.DataFrame):
+        reader = Reader(rating_scale=self.rating_scale)
+        data = Dataset.load_from_df(df[["user", "item", "rating"]], reader)
+        return data
+
+    def _build_seen_dict(self, df: pd.DataFrame):
+        return df.groupby("user")["item"].apply(set).to_dict()
+
+    def _safe_inner_uid(self, user):
+        try:
+            return self.trainset_.to_inner_uid(user)
+        except ValueError:
+            return None
+
+    def _safe_inner_iid(self, item):
+        try:
+            return self.trainset_.to_inner_iid(item)
+        except ValueError:
+            return None
+
+    # =========================
+    # API BaseModel
+    # =========================
+    def fit(self, df: pd.DataFrame):
+        self._validate_df(df)
+        df = df.copy()
+
+        data = self._build_surprise_dataset(df)
+        trainset = data.build_full_trainset()
+
+        algo = NMF(
+            n_factors=self.n_factors,
+            n_epochs=self.n_epochs,
+            biased=self.biased,
+            reg_pu=self.reg_pu,
+            reg_qi=self.reg_qi,
+            reg_bu=self.reg_bu,
+            reg_bi=self.reg_bi,
+            lr_bu=self.lr_bu,
+            lr_bi=self.lr_bi,
+            init_low=self.init_low,
+            init_high=self.init_high,
+            random_state=self.random_state,
+            verbose=self.verbose,
+        )
+        algo.fit(trainset)
+
+        self.algo_ = algo
+        self.trainset_ = trainset
+        self.global_mean_ = float(trainset.global_mean)
+
+        self.users_ = set(df["user"].unique())
+        self.items_ = set(df["item"].unique())
+        self.user_seen_items_ = self._build_seen_dict(df)
+
+        self.is_fitted_ = True
+        return self
+
+    def predict(self, user, item):
+        if not self.is_fitted_:
+            raise RuntimeError("El modelo no está entrenado. Llama antes a fit(df).")
+
+        est = float(self.algo_.predict(uid=user, iid=item).est)
+        return self._clip(est)
+
+    # =========================
+    # Extras útiles
+    # =========================
+    def predict_batch(self, df: pd.DataFrame) -> np.ndarray:
+        if not self.is_fitted_:
+            raise RuntimeError("El modelo no está entrenado. Llama antes a fit(df).")
+
+        required_cols = {"user", "item"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"El DataFrame debe contener las columnas {required_cols}. "
+                f"Faltan: {missing}"
+            )
+
+        preds = [
+            self._clip(self.algo_.predict(uid=u, iid=i).est)
+            for u, i in zip(df["user"].values, df["item"].values)
+        ]
+        return np.array(preds, dtype=float)
+
+    def recommend(self, user, top_k=10, exclude_seen=True):
+        if not self.is_fitted_:
+            raise RuntimeError("El modelo no está entrenado. Llama antes a fit(df).")
+
+        candidate_items = self.items_
+
+        if exclude_seen:
+            seen = self.user_seen_items_.get(user, set())
+            candidate_items = candidate_items - seen
+
+        scored = [(item, self.predict(user, item)) for item in candidate_items]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored[:top_k]
+
+    def get_user_embedding(self, user):
+        """
+        Devuelve el embedding latente no negativo del usuario.
+        Si el usuario no existe, devuelve None.
+        """
+        if not self.is_fitted_:
+            raise RuntimeError("El modelo no está entrenado. Llama antes a fit(df).")
+
+        inner_uid = self._safe_inner_uid(user)
+        if inner_uid is None:
+            return None
+
+        # En Surprise NMF, pu contiene los factores de usuario
+        return np.array(self.algo_.pu[inner_uid], dtype=float)
+
+    def get_item_embedding(self, item):
+        """
+        Devuelve el embedding latente no negativo del ítem.
+        Si el ítem no existe, devuelve None.
+        """
+        if not self.is_fitted_:
+            raise RuntimeError("El modelo no está entrenado. Llama antes a fit(df).")
+
+        inner_iid = self._safe_inner_iid(item)
+        if inner_iid is None:
+            return None
+
+        # En Surprise NMF, qi contiene los factores de ítem
+        return np.array(self.algo_.qi[inner_iid], dtype=float)
+
+    def get_user_bias(self, user):
+        """
+        Solo relevante si biased=True.
+        Si el usuario no existe o biased=False, devuelve 0.0.
+        """
+        if not self.is_fitted_:
+            raise RuntimeError("El modelo no está entrenado. Llama antes a fit(df).")
+
+        if not self.biased:
+            return 0.0
+
+        inner_uid = self._safe_inner_uid(user)
+        if inner_uid is None:
+            return 0.0
+
+        return float(self.algo_.bu[inner_uid])
+
+    def get_item_bias(self, item):
+        """
+        Solo relevante si biased=True.
+        Si el ítem no existe o biased=False, devuelve 0.0.
+        """
+        if not self.is_fitted_:
+            raise RuntimeError("El modelo no está entrenado. Llama antes a fit(df).")
+
+        if not self.biased:
+            return 0.0
+
+        inner_iid = self._safe_inner_iid(item)
+        if inner_iid is None:
+            return 0.0
+
+        return float(self.algo_.bi[inner_iid])
+
+    def explain_prediction(self, user, item):
+        """
+        Descompone la predicción.
+
+        biased=False:
+            pred = dot(pu, qi)
+
+        biased=True:
+            pred = mu + bu + bi + dot(pu, qi)
+        """
+        if not self.is_fitted_:
+            raise RuntimeError("El modelo no está entrenado. Llama antes a fit(df).")
+
+        pu = self.get_user_embedding(user)
+        qi = self.get_item_embedding(item)
+
+        dot = None
+        if pu is not None and qi is not None:
+            dot = float(np.dot(pu, qi))
+
+        mu = float(self.global_mean_)
+        bu = self.get_user_bias(user)
+        bi = self.get_item_bias(item)
+
+        # La predicción final la tomo desde Surprise para no inventar comportamiento
+        pred = self.predict(user, item)
+
+        return {
+            "global_mean": mu if self.biased else 0.0,
+            "user_bias": bu,
+            "item_bias": bi,
+            "dot_pu_qi": dot,
+            "prediction": pred,
+            "user_known": pu is not None,
+            "item_known": qi is not None,
+            "biased": self.biased,
+        }
