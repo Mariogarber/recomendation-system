@@ -351,3 +351,37 @@ class DatasetProfiler:
     def _print_profile_block(profile, fmt):
         for k, v in profile.items():
             print(f"  - {k}: {fmt(v)}")
+
+
+# ================= FUNCTIONS =================
+def analyze_biases_with_counts(train_df, model):
+    user_counts = train_df.groupby("user").size().rename("n_user_ratings")
+    item_counts = train_df.groupby("item").size().rename("n_item_ratings")
+
+    user_df = pd.DataFrame({
+        "user": model.idx_to_user_,
+        "user_bias": model.b_u_
+    }).merge(user_counts, on="user", how="left")
+
+    item_df = pd.DataFrame({
+        "item": model.idx_to_item_,
+        "item_bias": model.b_i_
+    }).merge(item_counts, on="item", how="left")
+
+    user_df["abs_user_bias"] = user_df["user_bias"].abs()
+    item_df["abs_item_bias"] = item_df["item_bias"].abs()
+
+    print("=== USERS más extremos ===")
+    print(user_df.sort_values("abs_user_bias", ascending=False).head(20))
+
+    print("\n=== ITEMS más extremos ===")
+    print(item_df.sort_values("abs_item_bias", ascending=False).head(20))
+
+    print("\n=== ITEMS raros con bias alto ===")
+    print(
+        item_df[item_df["n_item_ratings"] <= 2]
+        .sort_values("abs_item_bias", ascending=False)
+        .head(20)
+    )
+
+    return user_df, item_df
