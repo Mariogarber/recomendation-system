@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
-from surprise import Dataset, Reader, BaselineOnly
+from surprise import Dataset, Reader, BaselineOnly, KNNBaseline
+from surprise.prediction_algorithms.predictions import PredictionImpossible
 
 from .base import BaseModel
 
@@ -256,3 +257,205 @@ class SurpriseBaselineOnlyModel(BaseModel):
             "item_bias": bi,
             "prediction": pred,
         }
+    
+
+class SurpriseKNNBaselineWrapper(BaseModel):
+    """
+    Wrapper de Surprise KNNBaseline compatible con BaseModel.
+
+    Espera en fit:
+        DataFrame con columnas ['user', 'item', 'rating']
+
+    Parámetros principales:
+    -----------------------
+    user_based : bool
+        - True  -> vecinos entre usuarios
+        - False -> vecinos entre ítems
+
+    k : int
+        Número máximo de vecinos.
+
+    min_k : int
+        Número mínimo de vecinos requeridos.
+
+    sim_name : str
+        Métrica de similitud de Surprise.
+        Ejemplos: 'pearson_baseline', 'cosine', 'msd', 'pearson'
+
+    shrinkage : int | float
+        Regularización de similitud para pearson_baseline.
+
+    bsl_options : dict | None
+        Opciones del baseline interno de Surprise.
+        Ejemplo:
+            {
+                "method": "als",
+                "n_epochs": 10,
+                "reg_u": 15,
+                "reg_i": 10
+            }
+
+    min_rating, max_rating : float | None
+        Rango de ratings para Reader. Si no se indican, se infieren del df de entrenamiento.
+
+    unknown_strategy : str | float
+        Qué hacer si el usuario/item no visto provoca predicción no fiable o imposible.
+        Opciones:
+            - "global_mean" -> media global de train
+            - "nan"         -> np.nan
+            - número        -> valor fijo
+            - "surprise"    -> usar est tal cual devuelto por Surprise
+
+    verbose : bool
+        Si True, imprime info básica en fit.
+    """
+
+    def __init__(
+        self,
+        k=40,
+        min_k=1,
+        user_based=False,
+        sim_name="pearson_baseline",
+        shrinkage=100,
+        bsl_options=None,
+        min_rating=None,
+        max_rating=None,
+        unknown_strategy="global_mean",
+        clip_range=None,
+        verbose=False,
+        name=None,
+    ):
+        super().__init__(name=name, clip_range=clip_range)
+
+        self.k = k
+        self.min_k = min_k
+        self.user_based = user_based
+        self.sim_name = sim_name
+        self.shrinkage = shrinkage
+        self.bsl_options = bsl_options
+        self.min_rating = min_rating
+        self.max_rating = max_rating
+        self.unknown_strategy = unknown_strategy
+        self.verbose = verbose
+
+        self.model_ = None
+        self.trainset_ = None
+        self.global_mean_ = None
+        self.rating_scale_ = None
+
+    def fit(self, df):
+        required_cols = {"user", "item", "rating"}
+        missing = required_cols - set(df.columns)
+        if missing:
+            raise ValueError(f"Faltan columnas obligatorias en fit: {missing}")
+
+        train_df = df[["user", "item", "rating"]].copy()
+
+        # Surprise trabaja mejor con strings para ids arbitrarios
+        train_df["user"] = train_df["user"].astype(str)
+        train_df["item"] = train_df["item"].astype(str)
+        train_df["rating"] = train_df["rating"].astype(float)
+
+        min_rating = self.min_rating if self.min_rating is not None else float(train_df["rating"].min())
+        max_rating = self.max_rating if self.max_rating is not None else float(train_df["rating"].max())
+
+        if min_rating >= max_rating:
+            raise ValueError(
+                f"rating_scale inválido: min_rating={min_rating}, max_rating={max_rating}"
+            )
+
+        self.rating_scale_ = (min_rating, max_rating)
+        self.global_mean_ = float(train_df["rating"].mean())
+
+        reader = Reader(rating_scale=self.rating_scale_)
+        data = Dataset.load_from_df(train_df[["user", "item", "rating"]], reader)
+        self.trainset_ = data.build_full_trainset()
+
+        sim_options = {
+            "name": self.sim_name,
+            "user_based": self.user_based,
+        }
+
+        # pearson_baseline suele usar shrinkage; no molesta añadirlo
+        if self.shrinkage is not None:
+            sim_options["shrinkage"] = self.shrinkage
+
+        self.model_ = KNNBaseline(
+            k=self.k,
+            min_k=self.min_k,
+            sim_options=sim_options,
+            bsl_options=self.bsl_options,
+            verbose=self.verbose,
+        )
+
+        self.model_.fit(self.trainset_)
+
+        self.is_fitted_ = True
+
+        if self.verbose:
+            mode = "user-user" if self.user_based else "item-item"
+            print(
+                f"[{self.name}] entrenado | modo={mode} | "
+                f"k={self.k} | min_k={self.min_k} | "
+                f"sim={self.sim_name} | rating_scale={self.rating_scale_}"
+            )
+
+        return self
+
+    def _fallback_prediction(self):
+        """
+        Fallback explícito cuando no queremos depender del comportamiento
+        interno de Surprise para unknown users/items o predicciones imposibles.
+        """
+        if isinstance(self.unknown_strategy, (int, float)):
+            return float(self.unknown_strategy)
+
+        if self.unknown_strategy == "global_mean":
+            return float(self.global_mean_)
+
+        if self.unknown_strategy == "nan":
+            return np.nan
+
+        if self.unknown_strategy == "surprise":
+            # señal de que no hay fallback manual; se usará el valor de Surprise
+            return None
+
+        raise ValueError(
+            f"unknown_strategy no soportada: {self.unknown_strategy}"
+        )
+
+    def predict(self, user, item):
+        self._check_fitted()
+
+        raw_user = str(user)
+        raw_item = str(item)
+
+        manual_fallback = self._fallback_prediction()
+
+        # Detectar si son desconocidos en train
+        user_known = raw_user in self.trainset_._raw2inner_id_users
+        item_known = raw_item in self.trainset_._raw2inner_id_items
+
+        # Si quieres controlar tú explícitamente los unknowns, hazlo aquí
+        if (not user_known or not item_known) and self.unknown_strategy != "surprise":
+            pred = manual_fallback
+            return self._clip(pred) if not np.isnan(pred) else pred
+
+        try:
+            pred_obj = self.model_.predict(raw_user, raw_item)
+            pred = float(pred_obj.est)
+        except PredictionImpossible:
+            pred = manual_fallback if manual_fallback is not None else self.global_mean_
+
+        if np.isnan(pred):
+            return pred
+
+        return float(self._clip(pred))
+
+    def __repr__(self):
+        mode = "user-based" if self.user_based else "item-based"
+        return (
+            f"{self.name}("
+            f"mode={mode}, k={self.k}, min_k={self.min_k}, "
+            f"sim_name='{self.sim_name}')"
+        )
