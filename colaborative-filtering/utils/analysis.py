@@ -354,6 +354,7 @@ class DatasetProfiler:
 
 
 # ================= FUNCTIONS =================
+
 def analyze_biases_with_counts(train_df, model):
     user_counts = train_df.groupby("user").size().rename("n_user_ratings")
     item_counts = train_df.groupby("item").size().rename("n_item_ratings")
