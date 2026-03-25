@@ -187,13 +187,15 @@ class ItemKNNModel(BaseModel):
     def _dist_to_sim(self, distances: np.ndarray) -> np.ndarray:
         """Convert neighbour distances to non-negative similarity weights.
 
-        * ``cosine`` / ``correlation``: ``sim = 1 - distance``
-          (distance in [0, 2]; [0, 1] for non-negative vectors).
+        * ``cosine`` / ``correlation``: ``sim = max(0, 1 - distance)``,
+          i.e. ``1 - distance`` clipped at 0 (distance in [0, 2];
+          [0, 1] for non-negative vectors).
         * All other supported metrics: ``sim = 1 / (1 + distance)``
           which maps [0, ∞) → (0, 1].
         """
         if self.metric in ("cosine", "correlation"):
-            return 1.0 - distances
+            sims = 1.0 - distances
+            return np.clip(sims, 0.0, None)
         return 1.0 / (1.0 + distances)
 
     def _validate(self, df: pd.DataFrame):
