@@ -11,11 +11,11 @@ from .base import BaseModel
 
 class ItemKNNModel(BaseModel):
     """
-    Item-based KNN collaborative filter (cosine similarity, sparse).
+    Item-based KNN collaborative filter (sparse).
 
     For each prediction the model:
-      1. Retrieves the k most similar items (by cosine similarity on their
-         user-rating vectors).
+      1. Retrieves the k most similar items (by the chosen distance metric on
+         their user-rating vectors).
       2. Collects the target user's ratings for those neighbour items.
       3. Returns a similarity-weighted average of those ratings.
       4. Falls back to the global mean when there are no usable neighbours
@@ -26,13 +26,25 @@ class ItemKNNModel(BaseModel):
     k : int
         Maximum number of neighbour items to use.
     metric : str
-        Distance metric for NearestNeighbors (default: 'cosine').
+        Distance metric for NearestNeighbors. Must be one of
+        ``ItemKNNModel.SUPPORTED_METRICS`` (default: ``'cosine'``).
+
+        * ``'cosine'`` / ``'correlation'`` – similarity is computed as
+          ``1 - distance`` (distance lies in [0, 2]; [0, 1] for
+          non-negative rating vectors).
+        * ``'euclidean'`` / ``'manhattan'`` / ``'minkowski'`` –
+          similarity is computed as ``1 / (1 + distance)``, mapping
+          [0, ∞) to (0, 1].
     clip_range : tuple[float, float] | None
         Clip predictions to this range after estimation.
     n_jobs : int
         Parallel jobs for NearestNeighbors (-1 = all cores).
     name : str | None
     """
+
+    SUPPORTED_METRICS: frozenset[str] = frozenset(
+        {"cosine", "euclidean", "manhattan", "minkowski", "correlation"}
+    )
 
     def __init__(
         self,
@@ -42,6 +54,11 @@ class ItemKNNModel(BaseModel):
         n_jobs: int = -1,
         name: str | None = None,
     ):
+        if metric not in self.SUPPORTED_METRICS:
+            raise ValueError(
+                f"Unsupported metric '{metric}'. "
+                f"Supported metrics: {sorted(self.SUPPORTED_METRICS)}"
+            )
         super().__init__(name=name, clip_range=clip_range)
         self.k = k
         self.metric = metric
@@ -138,8 +155,9 @@ class ItemKNNModel(BaseModel):
         if len(rated) == 0:
             return float(self._clip(self._global_mean))
 
-        # Similarity = 1 - cosine_distance  (only for rated neighbours)
-        sims = (1.0 - np.array(neighbor_dist))[rated_mask]
+        # Convert distances to similarity weights using the appropriate
+        # formula for the chosen metric.
+        sims = self._dist_to_sim(np.array(neighbor_dist))[rated_mask]
 
         if sims.sum() == 0:
             est = float(rated.mean())
@@ -151,6 +169,18 @@ class ItemKNNModel(BaseModel):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _dist_to_sim(self, distances: np.ndarray) -> np.ndarray:
+        """Convert neighbour distances to non-negative similarity weights.
+
+        * ``cosine`` / ``correlation``: ``sim = 1 - distance``
+          (distance in [0, 2]; [0, 1] for non-negative vectors).
+        * All other supported metrics: ``sim = 1 / (1 + distance)``
+          which maps [0, ∞) → (0, 1].
+        """
+        if self.metric in ("cosine", "correlation"):
+            return 1.0 - distances
+        return 1.0 / (1.0 + distances)
 
     def _validate(self, df: pd.DataFrame):
         missing = {"user", "item", "rating"} - set(df.columns)
