@@ -193,6 +193,8 @@ class SurpriseSVDppEnsemble(BaseModel):
     ):
         super().__init__(name=name, clip_range=clip_range)
         self.seeds = seeds if seeds is not None else [42, 7, 2026]
+        if not self.seeds:
+            raise ValueError("'seeds' must be a non-empty list.")
         self.n_factors = n_factors
         self.n_epochs = n_epochs
         self.lr_all = lr_all
@@ -214,6 +216,8 @@ class SurpriseSVDppEnsemble(BaseModel):
         missing = {"user", "item", "rating"} - set(df.columns)
         if missing:
             raise ValueError(f"Missing columns: {missing}")
+        if df.empty:
+            raise ValueError("Training DataFrame is empty.")
 
         train_df = df[["user", "item", "rating"]].copy()
         train_df["user"] = train_df["user"].astype(str)

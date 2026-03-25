@@ -72,6 +72,11 @@ class ItemKNNModel(BaseModel):
         self._global_mean: float | None = None
         self._n_users: int = 0
         self._n_items: int = 0
+        # Precomputed lookup structures (populated in fit)
+        self._known_user_set: set | None = None
+        self._user_index_map: dict | None = None
+        self._known_item_set: set | None = None
+        self._item_index_map: dict | None = None
 
     # ------------------------------------------------------------------
     # BaseModel interface
@@ -113,6 +118,15 @@ class ItemKNNModel(BaseModel):
             n_jobs=self.n_jobs,
         )
         self._knn.fit(self._item_user_sparse)
+
+        # Precompute lookup structures for fast cold-start detection
+        user_classes = self._user_encoder.classes_
+        self._known_user_set = set(user_classes)
+        self._user_index_map = {cls: idx for idx, cls in enumerate(user_classes)}
+
+        item_classes = self._item_encoder.classes_
+        self._known_item_set = set(item_classes)
+        self._item_index_map = {cls: idx for idx, cls in enumerate(item_classes)}
 
         self.is_fitted_ = True
         return self
@@ -190,16 +204,14 @@ class ItemKNNModel(BaseModel):
             raise ValueError("Training DataFrame is empty.")
 
     def _safe_encode_user(self, user) -> int:
-        known = set(self._user_encoder.classes_)
-        if user not in known:
+        if user not in self._known_user_set:
             return -1
-        return int(self._user_encoder.transform([user])[0])
+        return self._user_index_map[user]
 
     def _safe_encode_item(self, item) -> int:
-        known = set(self._item_encoder.classes_)
-        if item not in known:
+        if item not in self._known_item_set:
             return -1
-        return int(self._item_encoder.transform([item])[0])
+        return self._item_index_map[item]
 
     def __repr__(self):
         return f"ItemKNNModel(k={self.k}, metric='{self.metric}')"
