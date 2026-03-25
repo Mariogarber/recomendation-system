@@ -1,6 +1,9 @@
 import numpy as np
+import pandas as pd
 from scipy.optimize import minimize
 from sklearn.linear_model import Ridge
+
+from typing import Optional, Dict, Any, Iterable
 
 
 class RatingEnsemble:
@@ -284,3 +287,221 @@ class RatingEnsemble:
 
     def get_weights(self):
         return None if self.weights is None else self.weights.copy()
+
+class ThresholdEnsembleModel:
+    """
+    Modelo híbrido basado en umbral de frecuencia del item.
+
+    Idea:
+        - si count(item) < threshold  -> usa rare_model
+        - si count(item) >= threshold -> usa frequent_model
+
+    Tanto rare_model como frequent_model pueden ser:
+        - modelos individuales compatibles con BaseModel
+        - ensembles que implementen predict(user, item)
+
+    Esto hace que el objeto resultante también sea un BaseModel,
+    así que puedes enchufarlo a cualquier Predictor existente
+    sin crear un predictor especial.
+
+    Parámetros
+    ----------
+    rare_model : BaseModel-like
+        Modelo/ensemble para items raros.
+    frequent_model : BaseModel-like
+        Modelo/ensemble para items frecuentes.
+    threshold : int
+        Umbral de frecuencia del item en train.
+    train_df : pd.DataFrame | None
+        DataFrame con columnas ['user', 'item', 'rating'].
+    item_counts : dict | pd.Series | None
+        Conteos precomputados item -> frecuencia.
+    clip_range : tuple | None
+        Rango de clipping de predicción.
+    default_prediction : float
+        Predicción fallback si falla el modelo.
+    unknown_item_policy : str
+        {"rare", "frequent"} para items no vistos en train.
+    name : str | None
+        Nombre del modelo.
+    verbose : bool
+        Si True, imprime resumen en fit.
+    """
+
+    def __init__(
+        self,
+        rare_model,
+        frequent_model,
+        threshold: int,
+        train_df: Optional[pd.DataFrame] = None,
+        item_counts: Optional[Any] = None,
+        clip_range: Optional[tuple] = None,
+        default_prediction: float = 7.0,
+        unknown_item_policy: str = "rare",
+        name: Optional[str] = None,
+        verbose: bool = False,
+    ):
+        super().__init__(name=name, clip_range=clip_range)
+
+        if threshold < 1:
+            raise ValueError("threshold debe ser >= 1")
+
+        if unknown_item_policy not in {"rare", "frequent"}:
+            raise ValueError("unknown_item_policy debe ser 'rare' o 'frequent'")
+
+        self.rare_model = rare_model
+        self.frequent_model = frequent_model
+        self.threshold = threshold
+        self.default_prediction = float(default_prediction)
+        self.unknown_item_policy = unknown_item_policy
+        self.verbose = verbose
+
+        self.item_counts = self._build_item_counts(train_df=train_df, item_counts=item_counts)
+
+        # Métricas internas de uso
+        self.rare_predictions_count_ = 0
+        self.frequent_predictions_count_ = 0
+        self.unknown_item_count_ = 0
+        self.errors_ = 0
+
+        self.is_fitted_ = False
+
+    # =========================
+    # Helpers internos
+    # =========================
+    def _build_item_counts(
+        self,
+        train_df: Optional[pd.DataFrame],
+        item_counts: Optional[Any],
+    ) -> Dict[Any, int]:
+        if item_counts is not None:
+            if isinstance(item_counts, pd.Series):
+                counts = item_counts.to_dict()
+            elif isinstance(item_counts, dict):
+                counts = dict(item_counts)
+            else:
+                raise TypeError("item_counts debe ser un dict o un pd.Series")
+
+            return {k: int(v) for k, v in counts.items()}
+
+        if train_df is None:
+            raise ValueError("Debes proporcionar train_df o item_counts")
+
+        required_cols = {"user", "item", "rating"}
+        if not required_cols.issubset(train_df.columns):
+            raise ValueError(
+                f"train_df debe contener las columnas {required_cols}, "
+                f"pero tiene {set(train_df.columns)}"
+            )
+
+        return train_df["item"].value_counts().astype(int).to_dict()
+
+    def _safe_fit_submodel(self, model, df: pd.DataFrame):
+        """
+        Hace fit del submodelo solo si implementa fit y no parece ya ajustado.
+        """
+        if not hasattr(model, "fit"):
+            return
+
+        already_fitted = getattr(model, "is_fitted_", False)
+        if already_fitted:
+            return
+
+        model.fit(df)
+
+    def _select_model(self, item):
+        count = self.item_counts.get(item, None)
+
+        if count is None:
+            self.unknown_item_count_ += 1
+            return self.rare_model if self.unknown_item_policy == "rare" else self.frequent_model
+
+        if count < self.threshold:
+            return self.rare_model
+
+        return self.frequent_model
+
+    def _clip_prediction(self, pred: float) -> float:
+        if self.clip_range is None:
+            return float(pred)
+        return float(np.clip(pred, self.clip_range[0], self.clip_range[1]))
+
+    # =========================
+    # API BaseModel
+    # =========================
+    def fit(self, df: pd.DataFrame):
+        """
+        Ajusta los submodelos si hace falta y recalcula item_counts desde df.
+        """
+        required_cols = {"user", "item", "rating"}
+        if not required_cols.issubset(df.columns):
+            raise ValueError(
+                f"df debe contener las columnas {required_cols}, pero tiene {set(df.columns)}"
+            )
+
+        # Recalcular frecuencias desde el train real usado en fit
+        self.item_counts = df["item"].value_counts().astype(int).to_dict()
+
+        # Ajustar submodelos si no estaban ya ajustados
+        self._safe_fit_submodel(self.rare_model, df)
+        self._safe_fit_submodel(self.frequent_model, df)
+
+        self.is_fitted_ = True
+
+        if self.verbose:
+            n_items = len(self.item_counts)
+            n_rare = sum(v < self.threshold for v in self.item_counts.values())
+            n_freq = sum(v >= self.threshold for v in self.item_counts.values())
+
+            print(
+                f"[ThresholdEnsembleModel] fitted | "
+                f"n_items={n_items} | threshold={self.threshold} | "
+                f"rare_items={n_rare} | frequent_items={n_freq}"
+            )
+
+        return self
+
+    def predict(self, user, item):
+        if not self.is_fitted_:
+            # Si tus submodelos ya están entrenados y has pasado item_counts/train_df
+            # puedes marcarlo a mano con self.is_fitted_ = True,
+            # pero en general es mejor llamar a fit().
+            raise RuntimeError("El modelo no está ajustado. Llama antes a fit().")
+
+        model = self._select_model(item)
+
+        if model is self.rare_model:
+            self.rare_predictions_count_ += 1
+        else:
+            self.frequent_predictions_count_ += 1
+
+        try:
+            pred = model.predict(user, item)
+        except Exception:
+            pred = self.default_prediction
+            self.errors_ += 1
+
+        return self._clip_prediction(pred)
+
+    def predict_df(self, df: pd.DataFrame, round_predictions: bool = False) -> pd.DataFrame:
+        if not {"user", "item"}.issubset(df.columns):
+            raise ValueError("df debe contener columnas ['user', 'item']")
+
+        out = df.copy()
+        out["prediction"] = [self.predict(u, i) for u, i in zip(df["user"], df["item"])]
+
+        if round_predictions:
+            out["prediction"] = out["prediction"].round()
+
+        return out
+
+    # =========================
+    # Inspección
+    # =========================
+    def get_usage_stats(self) -> Dict[str, int]:
+        return {
+            "rare_predictions": int(self.rare_predictions_count_),
+            "frequent_predictions": int(self.frequent_predictions_count_),
+            "unknown_items": int(self.unknown_item_count_),
+            "errors": int(self.errors_),
+        }
