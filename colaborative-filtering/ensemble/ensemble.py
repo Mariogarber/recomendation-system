@@ -3,6 +3,8 @@ import pandas as pd
 from scipy.optimize import minimize
 from sklearn.linear_model import Ridge
 
+from model.base import BaseModel
+
 from typing import Optional, Dict, Any, Iterable
 
 
@@ -341,7 +343,6 @@ class ThresholdEnsembleModel:
         name: Optional[str] = None,
         verbose: bool = False,
     ):
-        super().__init__(name=name, clip_range=clip_range)
 
         if threshold < 1:
             raise ValueError("threshold debe ser >= 1")
@@ -505,3 +506,297 @@ class ThresholdEnsembleModel:
             "unknown_items": int(self.unknown_item_count_),
             "errors": int(self.errors_),
         }
+
+class ManualRoutingEnsemble(BaseModel):
+    """
+    Ensemble manual basado en reglas de decisión según presencia
+    de user/item en el dataset de entrenamiento.
+
+    Rutas:
+        - warm:         user conocido, item conocido
+        - cold_user:    user desconocido, item conocido
+        - cold_item:    user conocido, item desconocido
+        - cold_both:    user desconocido, item desconocido
+
+    Además, opcionalmente puede considerar como "fríos" los users/items
+    con muy pocas apariciones en train mediante umbrales.
+
+    Parámetros
+    ----------
+    warm_model : BaseModel
+        Modelo principal para pares warm (user,item conocidos).
+
+    cold_user_model : BaseModel | None
+        Modelo a usar cuando el user no está en train pero el item sí.
+        Si es None, cae al fallback.
+
+    cold_item_model : BaseModel | None
+        Modelo a usar cuando el item no está en train pero el user sí.
+        Si es None, cae al fallback.
+
+    cold_both_model : BaseModel | None
+        Modelo a usar cuando ni user ni item están en train.
+        Si es None, cae al fallback.
+
+    fallback_model : BaseModel | None
+        Modelo de seguridad si falta alguno de los anteriores.
+        Si también es None, usa la media global.
+
+    fit_models : bool
+        Si True, llama a fit(df) sobre todos los modelos no nulos.
+        Si False, asume que ya están entrenados.
+
+    user_cold_threshold : int
+        Si > 0, un user con <= ese número de apariciones se trata como "cold".
+        Ojo: esto cambia el routing incluso aunque el user exista en train.
+
+    item_cold_threshold : int
+        Igual que el anterior, pero para item.
+
+    prefer_specialized_cold : bool
+        Si True, los thresholds tienen prioridad sobre la mera presencia.
+        Muy útil cuando quieres tratar distinto a users/items vistos 1 vez.
+    """
+
+    def __init__(
+        self,
+        warm_model,
+        cold_user_model=None,
+        cold_item_model=None,
+        cold_both_model=None,
+        fallback_model=None,
+        fit_models=True,
+        user_cold_threshold=0,
+        item_cold_threshold=0,
+        prefer_specialized_cold=True,
+        clip_range=None,
+        name=None,
+    ):
+        super().__init__(name=name, clip_range=clip_range)
+
+        self.warm_model = warm_model
+        self.cold_user_model = cold_user_model
+        self.cold_item_model = cold_item_model
+        self.cold_both_model = cold_both_model
+        self.fallback_model = fallback_model
+
+        self.fit_models = fit_models
+        self.user_cold_threshold = int(user_cold_threshold)
+        self.item_cold_threshold = int(item_cold_threshold)
+        self.prefer_specialized_cold = bool(prefer_specialized_cold)
+
+        self.global_mean_ = None
+        self.user_counts_ = None
+        self.item_counts_ = None
+        self.known_users_ = None
+        self.known_items_ = None
+
+    # =========================================================
+    # FIT
+    # =========================================================
+    def fit(self, df: pd.DataFrame):
+        self._validate_fit_df(df)
+
+        df = df[["user", "item", "rating"]].copy()
+
+        self.global_mean_ = float(df["rating"].mean())
+        self.user_counts_ = df["user"].value_counts().to_dict()
+        self.item_counts_ = df["item"].value_counts().to_dict()
+        self.known_users_ = set(self.user_counts_.keys())
+        self.known_items_ = set(self.item_counts_.keys())
+
+        models = self._unique_models()
+
+        if self.fit_models:
+            for model in models:
+                model.fit(df)
+
+        self.is_fitted_ = True
+        return self
+
+    # =========================================================
+    # PREDICT
+    # =========================================================
+    def predict(self, user, item):
+        self._check_fitted()
+
+        route, model = self._select_model(user, item)
+
+        if model is None:
+            pred = self.global_mean_
+        else:
+            pred = model.predict(user, item)
+
+        return float(self._clip(pred))
+
+    # =========================================================
+    # EXPLICABILIDAD
+    # =========================================================
+    def explain_route(self, user, item):
+        """
+        Devuelve información de la ruta elegida para ese par.
+        """
+        self._check_fitted()
+
+        user_known = user in self.known_users_
+        item_known = item in self.known_items_
+
+        user_count = self.user_counts_.get(user, 0)
+        item_count = self.item_counts_.get(item, 0)
+
+        user_is_cold = self._is_cold_user(user)
+        item_is_cold = self._is_cold_item(item)
+
+        route, model = self._select_model(user, item)
+
+        return {
+            "user_known": user_known,
+            "item_known": item_known,
+            "user_count": user_count,
+            "item_count": item_count,
+            "user_is_cold": user_is_cold,
+            "item_is_cold": item_is_cold,
+            "route": route,
+            "model_name": None if model is None else model.name,
+        }
+
+    def predict_with_route(self, user, item):
+        """
+        Devuelve predicción y metadatos de la ruta usada.
+        """
+        pred = self.predict(user, item)
+        info = self.explain_route(user, item)
+        info["prediction"] = pred
+        return info
+
+    # =========================================================
+    # BATCH
+    # =========================================================
+    def predict_df(self, df, round_predictions=False, return_route=False):
+        self._check_fitted()
+
+        preds = []
+        routes = []
+        model_names = []
+
+        for u, i in zip(df["user"], df["item"]):
+            route, model = self._select_model(u, i)
+
+            if model is None:
+                pred = self.global_mean_
+                model_name = "global_mean"
+            else:
+                pred = model.predict(u, i)
+                model_name = model.name
+
+            preds.append(float(self._clip(pred)))
+            routes.append(route)
+            model_names.append(model_name)
+
+        out = df.copy()
+        out["prediction"] = preds
+
+        if round_predictions:
+            out["prediction"] = out["prediction"].round()
+
+        if return_route:
+            out["route"] = routes
+            out["model_used"] = model_names
+
+        return out
+
+    # =========================================================
+    # ROUTING
+    # =========================================================
+    def _select_model(self, user, item):
+        user_known = user in self.known_users_
+        item_known = item in self.known_items_
+
+        user_is_cold = self._is_cold_user(user)
+        item_is_cold = self._is_cold_item(item)
+
+        # -----------------------------------------------------
+        # Caso 1: routing estricto por "frialdad" especializada
+        # -----------------------------------------------------
+        if self.prefer_specialized_cold:
+            if user_is_cold and item_is_cold:
+                return "cold_both", self._resolve_model(self.cold_both_model)
+            if user_is_cold and not item_is_cold:
+                return "cold_user", self._resolve_model(self.cold_user_model)
+            if not user_is_cold and item_is_cold:
+                return "cold_item", self._resolve_model(self.cold_item_model)
+            return "warm", self._resolve_model(self.warm_model)
+
+        # -----------------------------------------------------
+        # Caso 2: routing solo por presencia real en train
+        # -----------------------------------------------------
+        if user_known and item_known:
+            return "warm", self._resolve_model(self.warm_model)
+        if (not user_known) and item_known:
+            return "cold_user", self._resolve_model(self.cold_user_model)
+        if user_known and (not item_known):
+            return "cold_item", self._resolve_model(self.cold_item_model)
+        return "cold_both", self._resolve_model(self.cold_both_model)
+
+    def _resolve_model(self, preferred_model):
+        if preferred_model is not None:
+            return preferred_model
+        if self.fallback_model is not None:
+            return self.fallback_model
+        return None
+
+    def _is_cold_user(self, user):
+        count = self.user_counts_.get(user, 0)
+
+        if user not in self.known_users_:
+            return True
+
+        if self.user_cold_threshold > 0 and count <= self.user_cold_threshold:
+            return True
+
+        return False
+
+    def _is_cold_item(self, item):
+        count = self.item_counts_.get(item, 0)
+
+        if item not in self.known_items_:
+            return True
+
+        if self.item_cold_threshold > 0 and count <= self.item_cold_threshold:
+            return True
+
+        return False
+
+    # =========================================================
+    # HELPERS
+    # =========================================================
+    def _unique_models(self):
+        models = [
+            self.warm_model,
+            self.cold_user_model,
+            self.cold_item_model,
+            self.cold_both_model,
+            self.fallback_model,
+        ]
+
+        unique = []
+        seen_ids = set()
+
+        for m in models:
+            if m is None:
+                continue
+            if id(m) in seen_ids:
+                continue
+            seen_ids.add(id(m))
+            unique.append(m)
+
+        return unique
+
+    @staticmethod
+    def _validate_fit_df(df):
+        required = {"user", "item", "rating"}
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(f"Faltan columnas requeridas en fit: {missing}")
+        if len(df) == 0:
+            raise ValueError("El DataFrame de entrenamiento está vacío.")
