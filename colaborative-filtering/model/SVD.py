@@ -15,7 +15,14 @@ from .base import BaseModel
 def _build_surprise_trainset(df: pd.DataFrame, rating_scale=None):
     """Convert a pandas DataFrame to a Surprise full trainset."""
     if rating_scale is None:
-        rating_scale = (float(df["rating"].min()), float(df["rating"].max()))
+        min_rating = float(df["rating"].min())
+        max_rating = float(df["rating"].max())
+        if min_rating >= max_rating:
+            raise ValueError(
+                f"Invalid rating scale inferred from data: min_rating ({min_rating}) "
+                f"must be strictly less than max_rating ({max_rating})."
+            )
+        rating_scale = (min_rating, max_rating)
     reader = Reader(rating_scale=rating_scale)
     data = Dataset.load_from_df(df[["user", "item", "rating"]], reader)
     return data.build_full_trainset(), rating_scale
