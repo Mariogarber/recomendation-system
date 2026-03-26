@@ -489,7 +489,6 @@ class BayesianNonNegativeMF(BaseModel):
         if not np.all(np.isfinite(vals)):
             raise ValueError("Hay ratings no finitos.")
 
-        # Fiel al paper: ratings discretos en 0..R
         rounded = np.rint(vals)
         if not np.allclose(vals, rounded):
             bad = np.unique(vals[np.abs(vals - rounded) > 1e-8])[:10]

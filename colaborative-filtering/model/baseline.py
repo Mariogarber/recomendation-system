@@ -376,7 +376,6 @@ class SurpriseKNNBaselineWrapper(BaseModel):
             "user_based": self.user_based,
         }
 
-        # pearson_baseline suele usar shrinkage; no molesta añadirlo
         if self.shrinkage is not None:
             sim_options["shrinkage"] = self.shrinkage
 
@@ -436,7 +435,6 @@ class SurpriseKNNBaselineWrapper(BaseModel):
         user_known = raw_user in self.trainset_._raw2inner_id_users
         item_known = raw_item in self.trainset_._raw2inner_id_items
 
-        # Si quieres controlar tú explícitamente los unknowns, hazlo aquí
         if (not user_known or not item_known) and self.unknown_strategy != "surprise":
             pred = manual_fallback
             return self._clip(pred) if not np.isnan(pred) else pred
