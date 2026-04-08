@@ -3,3 +3,5 @@ __pycache__/
 solutions/*
 data/*
 models/*
+content-based/data/*
+content-based/models/*
