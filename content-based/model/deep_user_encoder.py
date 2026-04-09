@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Iterable
 
 import torch
 from torch import nn
@@ -15,9 +16,35 @@ class DeepUserEncoderArchitecture:
     rating_hidden_dim: int = 16
     metadata_hidden_dim: int = 32
     scorer_hidden_dim: int = 128
+    business_hidden_layers: tuple[int, ...] = ()
+    rating_hidden_layers: tuple[int, ...] = ()
+    metadata_hidden_layers: tuple[int, ...] = ()
+    scorer_hidden_layers: tuple[int, ...] = ()
     dropout: float = 0.1
     history_shrinkage_temperature: float = 3.0
     rating_modulation_scale: float = 0.35
+
+
+def _build_mlp(
+    *,
+    input_dim: int,
+    hidden_dims: Iterable[int],
+    output_dim: int,
+    dropout: float,
+    output_activation: bool = False,
+) -> nn.Sequential:
+    layers: list[nn.Module] = []
+    current_dim = input_dim
+    for hidden_dim in hidden_dims:
+        layers.append(nn.Linear(current_dim, hidden_dim))
+        layers.append(nn.ReLU())
+        if dropout > 0:
+            layers.append(nn.Dropout(dropout))
+        current_dim = hidden_dim
+    layers.append(nn.Linear(current_dim, output_dim))
+    if output_activation:
+        layers.append(nn.ReLU())
+    return nn.Sequential(*layers)
 
 
 class DeepUserRatingModel(nn.Module):
@@ -36,20 +63,29 @@ class DeepUserRatingModel(nn.Module):
         super().__init__()
         self.architecture = architecture
 
-        self.business_tower = nn.Sequential(
-            nn.Linear(architecture.business_input_dim, architecture.business_hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(architecture.dropout),
-            nn.Linear(architecture.business_hidden_dim, architecture.business_hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(architecture.dropout),
-            nn.Linear(architecture.business_hidden_dim, architecture.embedding_dim),
+        business_hidden_layers = (
+            architecture.business_hidden_layers
+            if architecture.business_hidden_layers
+            else (architecture.business_hidden_dim, architecture.business_hidden_dim)
         )
-        self.rating_encoder = nn.Sequential(
-            nn.Linear(2, architecture.rating_hidden_dim),
-            nn.ReLU(),
-            nn.Linear(architecture.rating_hidden_dim, architecture.rating_hidden_dim),
-            nn.ReLU(),
+        self.business_tower = _build_mlp(
+            input_dim=architecture.business_input_dim,
+            hidden_dims=business_hidden_layers,
+            output_dim=architecture.embedding_dim,
+            dropout=architecture.dropout,
+            output_activation=False,
+        )
+        rating_hidden_layers = (
+            architecture.rating_hidden_layers
+            if architecture.rating_hidden_layers
+            else (architecture.rating_hidden_dim,)
+        )
+        self.rating_encoder = _build_mlp(
+            input_dim=2,
+            hidden_dims=rating_hidden_layers,
+            output_dim=architecture.rating_hidden_dim,
+            dropout=0.0,
+            output_activation=True,
         )
         self.history_content_gate = nn.Sequential(
             nn.Linear(architecture.embedding_dim, architecture.business_hidden_dim),
@@ -70,12 +106,17 @@ class DeepUserRatingModel(nn.Module):
         )
 
         if architecture.metadata_input_dim > 0:
-            self.metadata_encoder = nn.Sequential(
-                nn.Linear(architecture.metadata_input_dim, max(architecture.metadata_hidden_dim * 2, 32)),
-                nn.ReLU(),
-                nn.Dropout(architecture.dropout),
-                nn.Linear(max(architecture.metadata_hidden_dim * 2, 32), architecture.metadata_hidden_dim),
-                nn.ReLU(),
+            metadata_hidden_layers = (
+                architecture.metadata_hidden_layers
+                if architecture.metadata_hidden_layers
+                else (max(architecture.metadata_hidden_dim * 2, 32),)
+            )
+            self.metadata_encoder = _build_mlp(
+                input_dim=architecture.metadata_input_dim,
+                hidden_dims=metadata_hidden_layers,
+                output_dim=architecture.metadata_hidden_dim,
+                dropout=architecture.dropout,
+                output_activation=True,
             )
             metadata_out_dim = architecture.metadata_hidden_dim
         else:
@@ -107,14 +148,17 @@ class DeepUserRatingModel(nn.Module):
             nn.Linear(architecture.scorer_hidden_dim, architecture.embedding_dim),
             nn.ReLU(),
         )
-        self.scorer = nn.Sequential(
-            nn.Linear((architecture.embedding_dim * 3) + 1, architecture.scorer_hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(architecture.dropout),
-            nn.Linear(architecture.scorer_hidden_dim, architecture.scorer_hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(architecture.dropout),
-            nn.Linear(architecture.scorer_hidden_dim, 1),
+        scorer_hidden_layers = (
+            architecture.scorer_hidden_layers
+            if architecture.scorer_hidden_layers
+            else (architecture.scorer_hidden_dim, architecture.scorer_hidden_dim)
+        )
+        self.scorer = _build_mlp(
+            input_dim=(architecture.embedding_dim * 3) + 1,
+            hidden_dims=scorer_hidden_layers,
+            output_dim=1,
+            dropout=architecture.dropout,
+            output_activation=False,
         )
 
     def encode_business(self, business_features: torch.Tensor) -> torch.Tensor:
