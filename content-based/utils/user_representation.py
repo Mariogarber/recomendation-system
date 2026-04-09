@@ -125,6 +125,7 @@ class UserRepresentationBuilder:
         train_reviews: pd.DataFrame,
         business_bundle: BusinessRepresentationBundle,
         users_df: pd.DataFrame | None = None,
+        target_user_ids: pd.Series | list[str] | np.ndarray | None = None,
     ) -> UserRepresentationBundle:
         canonical = canonicalize_reviews(train_reviews)
         if {"user", "item", "rating"} - set(canonical.columns):
@@ -158,8 +159,26 @@ class UserRepresentationBuilder:
         )
         profile_matrix = sparse.diags(1.0 / denominators).dot(weight_matrix).dot(business_matrix).tocsr().astype(np.float32)
 
+        output_user_series = _resolve_target_user_series(
+            base_user_ids=unique_user_series,
+            target_user_ids=target_user_ids,
+        )
+        if len(output_user_series) != len(unique_user_series) or not output_user_series.equals(unique_user_series):
+            profile_matrix = _expand_sparse_matrix_to_target_users(
+                matrix=profile_matrix,
+                source_user_ids=unique_user_series,
+                target_user_ids=output_user_series,
+            )
+            user_stats = _expand_user_stats_to_target_users(
+                user_stats=user_stats,
+                source_user_ids=unique_user_series,
+                target_user_ids=output_user_series,
+            )
+        else:
+            output_user_series = unique_user_series.copy()
+
         metadata_matrix, clean_metadata_table, metadata_feature_names = self._build_metadata_block(
-            unique_user_series,
+            output_user_series,
             users_df,
             train_reviews,
         )
@@ -170,14 +189,14 @@ class UserRepresentationBuilder:
         feature_metadata = self._build_feature_metadata(profile_feature_names, metadata_feature_names)
 
         clean_user_table = self._build_clean_user_table(
-            unique_user_series,
+            output_user_series,
             user_stats,
             fallback_summary,
             clean_metadata_table,
         )
 
         profile_summary = self._build_profile_summary(
-            unique_user_series=unique_user_series,
+            unique_user_series=output_user_series,
             profile_matrix=profile_matrix,
             metadata_matrix=metadata_matrix,
             full_user_matrix=full_user_matrix,
@@ -188,17 +207,17 @@ class UserRepresentationBuilder:
         )
 
         audit_details = compare_user_metadata_with_train(
-            users_df if users_df is not None else pd.DataFrame({"user_id": unique_user_series}),
+            users_df if users_df is not None else pd.DataFrame({"user_id": output_user_series}),
             train_reviews,
-        ) if users_df is not None else pd.DataFrame({"user_id": unique_user_series})
+        ) if users_df is not None else pd.DataFrame({"user_id": output_user_series})
         audit_summary = summarize_user_comparison(audit_details) if users_df is not None else {
-            "total_rows": int(len(unique_user_series)),
-            "rows_seen_in_train": int(len(unique_user_series)),
+            "total_rows": int(len(output_user_series)),
+            "rows_seen_in_train": int(len(output_user_series)),
             "rows_unseen_in_train": 0,
         }
 
         self._run_validation_checks(
-            user_ids=unique_user_series,
+            user_ids=output_user_series,
             profile_matrix=profile_matrix,
             metadata_matrix=metadata_matrix,
             full_user_matrix=full_user_matrix,
@@ -207,7 +226,7 @@ class UserRepresentationBuilder:
         )
 
         return UserRepresentationBundle(
-            user_ids=unique_user_series,
+            user_ids=output_user_series,
             clean_user_table=clean_user_table,
             profile_matrix=profile_matrix,
             metadata_matrix=metadata_matrix,
@@ -332,50 +351,12 @@ class UserRepresentationBuilder:
         users_df: pd.DataFrame | None,
         train_reviews: pd.DataFrame,
     ) -> tuple[sparse.csr_matrix, pd.DataFrame, list[str]]:
-        if not self.config.include_metadata:
-            empty = sparse.csr_matrix((len(unique_users), 0), dtype=np.float32)
-            return empty, pd.DataFrame({"user_id": unique_users}), []
-
-        metadata = pd.DataFrame({"user_id": unique_users})
-        if users_df is not None and "user_id" in users_df.columns:
-            user_metadata = users_df.drop_duplicates(subset=["user_id"]).copy()
-            keep_columns = ["user_id", "yelping_since", "useful", "funny", "cool", "fans", "elite"]
-            keep_columns.extend([column for column in user_metadata.columns if column.startswith("compliment_")])
-            keep_columns = [column for column in keep_columns if column in user_metadata.columns]
-            metadata = metadata.merge(user_metadata[keep_columns], on="user_id", how="left")
-
-        train_end = pd.to_datetime(train_reviews["date"], errors="coerce").max()
-        yelping_since = pd.to_datetime(metadata.get("yelping_since"), errors="coerce")
-        tenure_days = (train_end - yelping_since).dt.total_seconds() / 86400.0
-        metadata["metadata__tenure_days"] = tenure_days.fillna(float(np.nanmedian(tenure_days)) if np.isfinite(np.nanmedian(tenure_days)) else 0.0)
-        metadata["metadata__elite_years_count"] = metadata.get("elite", pd.Series(index=metadata.index)).apply(_parse_elite_years_count)
-        metadata["metadata__elite_any"] = (metadata["metadata__elite_years_count"] > 0).astype(np.float32)
-
-        numeric_base = []
-        for column in ["useful", "funny", "cool", "fans"]:
-            if column in metadata.columns:
-                transformed = np.log1p(pd.to_numeric(metadata[column], errors="coerce").fillna(0.0).to_numpy(dtype=np.float32))
-                normalized = _safe_zscore(transformed)
-                feature_name = f"metadata__{column}_log1p_z"
-                metadata[feature_name] = normalized
-                numeric_base.append(feature_name)
-
-        compliment_columns = [column for column in metadata.columns if column.startswith("compliment_")]
-        metadata_feature_names = ["metadata__tenure_days_z", "metadata__elite_years_count_z", "metadata__elite_any"]
-        metadata["metadata__tenure_days_z"] = _safe_zscore(metadata["metadata__tenure_days"].to_numpy(dtype=np.float32))
-        metadata["metadata__elite_years_count_z"] = _safe_zscore(metadata["metadata__elite_years_count"].to_numpy(dtype=np.float32))
-        metadata_feature_names.extend(numeric_base)
-
-        for column in compliment_columns:
-            transformed = np.log1p(pd.to_numeric(metadata[column], errors="coerce").fillna(0.0).to_numpy(dtype=np.float32))
-            feature_name = f"metadata__{column}_log1p_z"
-            metadata[feature_name] = _safe_zscore(transformed)
-            metadata_feature_names.append(feature_name)
-
-        matrix_values = metadata[metadata_feature_names].fillna(0.0).to_numpy(dtype=np.float32)
-        metadata_matrix = sparse.csr_matrix(matrix_values)
-        clean_table = metadata[["user_id", "metadata__tenure_days", "metadata__elite_years_count", "metadata__elite_any", *numeric_base, *[name for name in metadata_feature_names if name.startswith("metadata__compliment_")]]].copy()
-        return metadata_matrix, clean_table, metadata_feature_names
+        return build_safe_user_metadata_block(
+            unique_users=unique_users,
+            users_df=users_df,
+            train_reviews=train_reviews,
+            include_metadata=self.config.include_metadata,
+        )
 
     def _build_feature_metadata(
         self,
@@ -537,3 +518,133 @@ def _save_clean_table(df: pd.DataFrame, filepath_without_suffix: Path) -> Path:
         csv_path = filepath_without_suffix.with_suffix(".csv")
         df.to_csv(csv_path, index=False)
         return csv_path
+
+
+def build_safe_user_metadata_block(
+    unique_users: pd.Series,
+    users_df: pd.DataFrame | None,
+    train_reviews: pd.DataFrame,
+    *,
+    include_metadata: bool = True,
+) -> tuple[sparse.csr_matrix, pd.DataFrame, list[str]]:
+    if not include_metadata:
+        empty = sparse.csr_matrix((len(unique_users), 0), dtype=np.float32)
+        return empty, pd.DataFrame({"user_id": unique_users}), []
+
+    metadata = pd.DataFrame({"user_id": unique_users})
+    if users_df is not None and "user_id" in users_df.columns:
+        user_metadata = users_df.drop_duplicates(subset=["user_id"]).copy()
+        keep_columns = ["user_id", "yelping_since", "useful", "funny", "cool", "fans", "elite"]
+        keep_columns.extend([column for column in user_metadata.columns if column.startswith("compliment_")])
+        keep_columns = [column for column in keep_columns if column in user_metadata.columns]
+        metadata = metadata.merge(user_metadata[keep_columns], on="user_id", how="left")
+
+    train_end = pd.to_datetime(train_reviews["date"], errors="coerce").max()
+    yelping_since = pd.to_datetime(metadata.get("yelping_since"), errors="coerce")
+    tenure_days = (train_end - yelping_since).dt.total_seconds() / 86400.0
+    nanmedian_tenure = float(np.nanmedian(tenure_days)) if len(metadata) else 0.0
+    metadata["metadata__tenure_days"] = tenure_days.fillna(nanmedian_tenure if np.isfinite(nanmedian_tenure) else 0.0)
+    metadata["metadata__elite_years_count"] = metadata.get("elite", pd.Series(index=metadata.index)).apply(_parse_elite_years_count)
+    metadata["metadata__elite_any"] = (metadata["metadata__elite_years_count"] > 0).astype(np.float32)
+
+    numeric_base: list[str] = []
+    for column in ["useful", "funny", "cool", "fans"]:
+        if column in metadata.columns:
+            transformed = np.log1p(pd.to_numeric(metadata[column], errors="coerce").fillna(0.0).to_numpy(dtype=np.float32))
+            normalized = _safe_zscore(transformed)
+            feature_name = f"metadata__{column}_log1p_z"
+            metadata[feature_name] = normalized
+            numeric_base.append(feature_name)
+
+    compliment_columns = [column for column in metadata.columns if column.startswith("compliment_")]
+    metadata_feature_names = ["metadata__tenure_days_z", "metadata__elite_years_count_z", "metadata__elite_any"]
+    metadata["metadata__tenure_days_z"] = _safe_zscore(metadata["metadata__tenure_days"].to_numpy(dtype=np.float32))
+    metadata["metadata__elite_years_count_z"] = _safe_zscore(metadata["metadata__elite_years_count"].to_numpy(dtype=np.float32))
+    metadata_feature_names.extend(numeric_base)
+
+    for column in compliment_columns:
+        transformed = np.log1p(pd.to_numeric(metadata[column], errors="coerce").fillna(0.0).to_numpy(dtype=np.float32))
+        feature_name = f"metadata__{column}_log1p_z"
+        metadata[feature_name] = _safe_zscore(transformed)
+        metadata_feature_names.append(feature_name)
+
+    matrix_values = metadata[metadata_feature_names].fillna(0.0).to_numpy(dtype=np.float32)
+    metadata_matrix = sparse.csr_matrix(matrix_values)
+    clean_table = metadata[[
+        "user_id",
+        "metadata__tenure_days",
+        "metadata__elite_years_count",
+        "metadata__elite_any",
+        *numeric_base,
+        *[name for name in metadata_feature_names if name.startswith("metadata__compliment_")],
+    ]].copy()
+    return metadata_matrix, clean_table, metadata_feature_names
+
+
+def _resolve_target_user_series(
+    *,
+    base_user_ids: pd.Series,
+    target_user_ids: pd.Series | list[str] | np.ndarray | None,
+) -> pd.Series:
+    if target_user_ids is None:
+        return base_user_ids.reset_index(drop=True).rename("user_id")
+
+    raw_series = pd.Series(target_user_ids, dtype="object").dropna()
+    if raw_series.empty:
+        return base_user_ids.reset_index(drop=True).rename("user_id")
+
+    resolved = raw_series.drop_duplicates().reset_index(drop=True)
+    resolved.name = "user_id"
+    return resolved
+
+
+def _expand_sparse_matrix_to_target_users(
+    *,
+    matrix: sparse.csr_matrix,
+    source_user_ids: pd.Series,
+    target_user_ids: pd.Series,
+) -> sparse.csr_matrix:
+    if len(source_user_ids) == len(target_user_ids) and source_user_ids.reset_index(drop=True).equals(target_user_ids.reset_index(drop=True)):
+        return matrix
+
+    source_index = pd.Series(
+        np.arange(len(source_user_ids), dtype=np.int32),
+        index=source_user_ids.to_numpy(),
+    )
+    mapped = target_user_ids.map(source_index)
+    known_mask = mapped.notna().to_numpy()
+    if not known_mask.any():
+        return sparse.csr_matrix((len(target_user_ids), matrix.shape[1]), dtype=matrix.dtype)
+
+    known_positions = np.flatnonzero(known_mask)
+    sliced = matrix[mapped[known_mask].to_numpy(dtype=np.int32)].tocoo()
+    remapped_rows = known_positions[sliced.row]
+    expanded = sparse.coo_matrix(
+        (sliced.data, (remapped_rows, sliced.col)),
+        shape=(len(target_user_ids), matrix.shape[1]),
+        dtype=matrix.dtype,
+    )
+    return expanded.tocsr()
+
+
+def _expand_user_stats_to_target_users(
+    *,
+    user_stats: pd.DataFrame,
+    source_user_ids: pd.Series,
+    target_user_ids: pd.Series,
+) -> pd.DataFrame:
+    if len(source_user_ids) == len(target_user_ids) and source_user_ids.reset_index(drop=True).equals(target_user_ids.reset_index(drop=True)):
+        return user_stats.reset_index(drop=True)
+
+    expanded = user_stats.copy()
+    expanded.index = pd.Index(source_user_ids.to_numpy(), name="user_id")
+    expanded = expanded.reindex(target_user_ids.to_numpy())
+    expanded["history_count"] = expanded["history_count"].fillna(0).astype(np.int32)
+    expanded["user_mean_rating"] = expanded["user_mean_rating"].fillna(0.0).astype(np.float32)
+    if "last_timestamp" in expanded.columns:
+        expanded["last_timestamp"] = pd.to_datetime(expanded["last_timestamp"], errors="coerce")
+    expanded["history_band"] = [
+        "0" if int(count) == 0 else _history_band(int(count))
+        for count in expanded["history_count"].to_numpy(dtype=np.int32)
+    ]
+    return expanded.reset_index(drop=True)

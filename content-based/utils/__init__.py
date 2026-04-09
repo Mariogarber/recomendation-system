@@ -17,6 +17,12 @@ from .business_representation import (
     BusinessRepresentationBundle,
     BusinessRepresentationConfig,
 )
+from .deep_user_embeddings import (
+    DeepUserEmbeddingBuilder,
+    DeepUserEmbeddingBundle,
+    DeepUserEmbeddingConfig,
+    build_target_user_ids,
+)
 from .io import (
     canonicalize_reviews,
     get_default_data_dir,
@@ -34,6 +40,7 @@ from .user_representation import (
     UserRepresentationBuilder,
     UserRepresentationBundle,
     UserRepresentationConfig,
+    build_safe_user_metadata_block,
 )
 
 __all__ = [
@@ -46,6 +53,11 @@ __all__ = [
     "cold_start_breakdown",
     "compare_business_metadata_with_train",
     "compare_user_metadata_with_train",
+    "DeepUserEmbeddingBuilder",
+    "DeepUserEmbeddingBundle",
+    "DeepUserEmbeddingConfig",
+    "build_safe_user_metadata_block",
+    "build_target_user_ids",
     "extract_hours_features",
     "get_default_data_dir",
     "load_businesses",
