@@ -1,101 +1,312 @@
-# Plan Description
-In this document we describe the main plan to desing the model for the competition
+# Content-Based Recommendation Plan
 
-## Data description
+This document defines a concrete plan for the content-based branch of the competition.
+The objective is to predict the rating that a user will give to a business while being
+careful with leakage, cold start, and evaluation quality.
 
-We can describe our dataset as a graph, were the nodes can be:
+## 1. Main principles
+
+- The first version must be a true content-based model.
+- User preferences must be built from the content of previously rated businesses.
+- Metadata that may contain information beyond `train_reviews.csv` must not be used
+  directly without a leakage audit.
+- The plan must include explicit handling for cold-start users, because they are a
+  large fraction of the test set.
+- Every new feature family must be validated through ablation, not only intuition.
+
+## 2. Data view
+
+We can describe the dataset as a graph:
 - **User nodes**
-- **Bussiness nodes**
+- **Business nodes**
+- **User -> Business** review edges
+- **User -> User** friend edges
 
-This nodes can be connected by different edges:
-- **User -> User**: Friend relationship, can be use to enrich the user prediction.
-- **User -> Bussiness**: Review edge. Has different atributtes, including the `rating` label.
+For the content-based model, the core information flow will be:
+- Build a robust business content vector.
+- Build each user profile from the businesses already rated by that user in train.
+- Score a candidate business against the user profile.
 
-### User Description
+Friend relations will be treated as an optional secondary feature block, not as part of
+the first baseline.
 
-The avalaible features for user nodes are:
-- User Id
-- Name
-- Review count
-- Yelping since (time on platform)
-- Friends Id's (as an array)
-- Useful votes
-- Funny votes
-- Cool votes
-- Fans Number
-- Average start ratings
+## 3. Leakage audit
 
-### Bussiness Description
+Before training any model, classify each feature into one of these groups:
+- **Safe direct feature**: can be used as it appears in the metadata file.
+- **Safe only if recomputed from train**: may use future information if taken directly.
+- **Unsafe for this competition setting**: should not be used in the first version.
 
-The avalaible features for bussiness nodes are:
-- Bussiness Id
-- Name
-- Address
-- City
-- State
-- Postal Code
-- Latitude
-- Longitude
-- Average start ratings (rounded to first decimal)
-- Is open (bool)
-- Categories (as an array, probably one hot encoder applied)
-- Atributtes. This is needs to be parsed somehow, probably as a different 
+### 3.1 Features to audit first
 
-### Review Description
+User-level candidates:
+- `review_count`
+- `average_stars`
+- `yelping_since`
+- `useful`, `funny`, `cool`
+- `fans`
+- `elite`
+- `compliment_*`
+- `friends`
 
-The avalaible features for the review edges are:
-- Review id
-- Starts (label to predict)
-- Date
-- Useful reactions
-- Funny reactions
-- Cool reactions
+Business-level candidates:
+- `stars`
+- `review_count`
+- `is_open`
+- `city`
+- `state`
+- `postal_code`
+- `latitude`, `longitude`
+- `categories`
+- `attributes`
+- `hours`
 
-## User feature vector
+Review-level candidates:
+- `date`
+- `useful`, `funny`, `cool`
 
-The user embedding will be formed by:
-- Review count
-- Time on platform
-- Useful votes
-- Funny votes
-- Cool votes
-- Fans Number
+### 3.2 Leakage tasks
 
-Every user will have this feature vector assigned. A first study will determine how useful can be the features of the user's friends to enrich their own embedding.
+- Compare user metadata aggregates against aggregates recomputed only from `train_reviews.csv`.
+- Compare business metadata aggregates against aggregates recomputed only from `train_reviews.csv`.
+- Decide which aggregate features must be removed or recomputed from train only.
+- Document the final whitelist of allowed features before any model comparison.
 
-If this study ends successfully, the user input will be the user feature vector plus the friends feature vector mean.
+## 4. Exploratory analysis tasks
 
-## Bussiness feature vector
+### 4.1 Dataset structure
 
-The bussiness embedding will be defined by two feature vectors.
-Firstly, we define the main features vector:
-- City (Label Encoder target)
-- State (Label Encoder target)
-- Latitude
-- Longitude
-- Mean starts
-- Review count
-- Is open (boolean flag)
-- Categories (Onehot or Label Encoder target, depending on the cardinality of the set)
+- Measure train/test sizes, unique users, unique businesses, and interaction density.
+- Quantify cold start:
+  - new user + known business
+  - known user + new business
+  - new user + new business
+- Compute review-count distributions for users and businesses.
+- Check target distribution of stars and business/user skew.
 
-The other part of the final embedding will be defined using the bussiness attributes. We need to explore this atributtes to ensure the best way to create this vector (DL embeddings, encoders)
+### 4.2 Missingness and cardinality
 
-## Review feature vector
+- Measure missing rates for `attributes`, `categories`, and `hours`.
+- Measure cardinality for `city`, `state`, postal zones, and category vocabulary.
+- Count how many distinct business attributes exist after parsing.
+- Detect rare categories and rare attributes to decide pruning thresholds.
 
-The review feature vector will we defined by:
-- Date timestamp
-- Useful flag
-- Funny flag
-- Cool flag
+### 4.3 Temporal analysis
 
-This features can be used as correctors for the predicted rating, or as confidence value for the rating.
+- Inspect train and test date ranges.
+- Compare random split validation against time-based validation.
+- Evaluate whether recency weighting helps when building user profiles.
 
-## TODO Analysis
+### 4.4 User-side analysis
 
-- Check correlation between user fans and all of their review flags. It can be a good way to normalize.
-- Check correlation between user time on platform and number of fans and number of reviews. This let us to normalize the users (users with older sign-up date probably has more fans and number of reviews)
-- Explore the bussiness atributtes and decided the best strategy to build it vector.
+- Study how user history length affects predictability.
+- Segment users by number of train reviews: `1`, `2-5`, `6-20`, `>20`.
+- Measure whether `fans`, `compliments`, and engagement counts correlate with rating bias.
+- Leave friend features for a later ablation after the core content model is stable.
 
-## Model Design
+### 4.5 Business-side analysis
 
-TODO
+- Parse `categories` as multi-label text.
+- Parse `attributes` as structured key/value features.
+- Convert `hours` into usable schedule features:
+  - open days count
+  - total weekly opening hours
+  - weekend availability
+  - late-night availability if possible
+- Check whether geographic information should be raw, normalized, clustered, or both.
+
+## 5. Business representation
+
+The first strong business vector should combine the following blocks:
+
+### 5.1 Structured business features
+
+- `state` as one-hot or embedding
+- `city` as one-hot, hashing, or embedding depending on cardinality
+- normalized `latitude` and `longitude`
+- `is_open`
+- leakage-safe business popularity features only if approved by the audit
+
+### 5.2 Category features
+
+- Parse category strings into tokens.
+- Build a multi-hot or TF-IDF representation.
+- Remove overly rare categories if they create too much sparsity.
+
+### 5.3 Attribute features
+
+- Parse the `attributes` dictionary.
+- Flatten boolean and low-cardinality values into indicator variables.
+- Group rare values into `other` when necessary.
+- Keep a parser report with coverage and parsing errors.
+
+### 5.4 Hours features
+
+- Parse the `hours` dictionary.
+- Build compact numerical features instead of keeping raw strings.
+
+## 6. User representation
+
+The user profile must be created from previously rated businesses, not only from user metadata.
+
+### 6.1 Core user profile
+
+For each user:
+- collect all businesses rated in train
+- map them to business content vectors
+- aggregate them into a user profile vector
+
+Aggregation variants to test:
+- simple mean of rated business vectors
+- rating-weighted mean
+- centered weighting using `(rating - user_mean_train)`
+- recency-weighted aggregation
+
+### 6.2 User metadata block
+
+User metadata can be added as a secondary block only after the leakage audit.
+Candidate metadata:
+- `yelping_since`
+- engagement counts
+- `fans`
+- `elite`
+- `compliment_*`
+
+These should be treated as calibration features, not as the main source of preference.
+
+### 6.3 Friend block
+
+Friend information is optional and should be postponed to a later iteration.
+If tested, the first approach should be:
+- compute friend aggregate statistics only for friends seen in train
+- add friend-summary features, not a full graph model
+- compare against the no-friends baseline through ablation
+
+## 7. Prediction strategy
+
+The model design will be staged.
+
+### 7.1 Baselines
+
+Implement and evaluate:
+- global mean
+- business mean from train
+- user mean from train
+- bias baseline: `global + user_bias + business_bias`
+- simple content score using user-profile vs business-vector cosine similarity
+
+### 7.2 First content-based regressor
+
+Build a supervised model using:
+- user profile vector
+- candidate business vector
+- similarity features between user and business
+- safe user metadata
+- safe business metadata
+- optional review-context features available in test: `date`, `useful`, `funny`, `cool`
+
+Candidate regressors:
+- Ridge regression
+- Gradient boosting
+- XGBoost or LightGBM if infrastructure is available
+
+### 7.3 Cold-start policy
+
+Because most cold-start cases are new users with known businesses, define explicit rules:
+
+- **Known user, known business**:
+  use the full content-based regressor
+- **New user, known business**:
+  use business features + safe review-context features + global/business priors
+- **Known user, new business**:
+  use user profile + business content if available from metadata
+- **New user, new business**:
+  use the safest fallback baseline
+
+## 8. Validation protocol
+
+The competition metric is MAE, so the analysis must optimize for MAE first.
+
+### 8.1 Core evaluation
+
+- Use MAE as the main metric
+- Track RMSE as a secondary metric
+- Clip predictions to the valid rating range
+
+### 8.2 Validation splits
+
+- random validation split for fast iteration
+- time-aware validation split for robustness
+
+### 8.3 Mandatory segmented evaluation
+
+Report MAE by:
+- cold-start users vs seen users
+- users with short vs long history
+- businesses with low vs high support
+- time slices if temporal drift is relevant
+
+### 8.4 Ablation table
+
+Run an ablation table for:
+- categories only
+- categories + attributes
+- categories + attributes + hours
+- adding user metadata
+- adding review-context features
+- adding friend features
+
+## 9. Ordered implementation phases
+
+### Phase 1: Data audit and parsers
+
+- Build leakage report
+- Build `categories` parser
+- Build `attributes` parser
+- Build `hours` parser
+- Produce a clean feature-ready business table
+
+### Phase 2: Baselines and validation
+
+- Implement leakage-safe baselines
+- Create random and temporal validation splits
+- Establish benchmark MAE values
+
+### Phase 3: Business and user profiles
+
+- Build business vectors
+- Build user profile aggregation pipeline
+- Evaluate simple similarity-based recommenders
+
+### Phase 4: Supervised content model
+
+- Train regressors on profile, business, and similarity features
+- Add safe metadata blocks
+- Tune the best model on validation
+
+### Phase 5: Cold-start specialization
+
+- Implement explicit cold-start branches
+- Compare a unified model against segmented policies
+
+### Phase 6: Optional extensions
+
+- Friend-summary features
+- richer temporal weighting
+- lightweight hybridization with collaborative predictions if needed
+
+## 10. Deliverables
+
+Each phase should end with:
+- a short experiment note
+- MAE results on validation
+- segmented error analysis
+- decision on what stays, what is removed, and why
+
+## 11. Definition of success
+
+The content-based branch will be considered successful if it:
+- beats the naive global and business-mean baselines
+- remains leakage-safe
+- behaves reasonably on cold-start users
+- has a clear ablation story explaining which feature families really help
