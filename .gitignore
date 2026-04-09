@@ -6,3 +6,4 @@ models/*
 content-based/data/*
 content-based/models/*
 content-based/artifacts/*
+*.pdf
