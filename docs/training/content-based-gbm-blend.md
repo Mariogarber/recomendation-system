@@ -13,6 +13,25 @@ The content-based branch now has a hybrid submission path with these components:
 - `predict_gbm_submission.py`: generates a rounded GBM submission with columns `review_id,stars`
 - `blend_deep_gbm_submission.py`: blends the already-trained deep submission with the GBM submission
 
+## Model Structure
+
+```mermaid
+flowchart TD
+    A["deep submission"] --> B["blend rule"]
+    C["GBM submission"] --> B
+    D["known user flag"] --> B
+    B --> E["final stars"]
+```
+
+## Routing Technique
+
+```mermaid
+flowchart TD
+    A["target row"] --> B{"user_id in train_reviews?"}
+    B -->|"yes"| C["round_half_up((deep_star + gbm_star) / 2)"]
+    B -->|"no"| D["gbm_star"]
+```
+
 ## Blend Rule
 
 The final submission uses this routing policy:

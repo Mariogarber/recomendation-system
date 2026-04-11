@@ -2,6 +2,8 @@
 
 Fecha: `2026-04-11`
 
+Estado: `superseded` por [`raw-router-prefix-deep-2026-04-11.md`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/raw-router-prefix-deep-2026-04-11.md)
+
 ## Objetivo
 
 Implementar la fase B del plan de mejora sobre `raw_core`:
@@ -9,6 +11,24 @@ Implementar la fase B del plan de mejora sobre `raw_core`:
 - conservar el camino ganador para usuarios conocidos
 - enriquecer solo la rama de cold start con una representacion de usuario basada en arquetipos
 - exportar una submission en formato de competicion
+
+## Estructura De Modelos
+
+```mermaid
+flowchart TD
+    A["raw_core features"] --> B["known_model"]
+    A --> C["cold_model"]
+    D["metadata-only archetype features"] --> C
+```
+
+## Tecnica De Enrutado
+
+```mermaid
+flowchart TD
+    A["target review"] --> B{"user known in train?"}
+    B -->|"yes"| C["known_model"]
+    B -->|"no"| D["cold_model"]
+```
 
 ## Proceso implementado
 

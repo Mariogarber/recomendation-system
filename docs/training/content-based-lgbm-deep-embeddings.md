@@ -20,6 +20,18 @@ The model keeps the cold-start behavior explicit:
 - user-side embedding features are masked to zero when the row is cold start
 - synthetic cold-start rows are injected during training so the tree model sees `history_count = 0`
 
+## Estructura Del Modelo
+
+```mermaid
+flowchart TD
+    A["user_deep_features"] --> B["feature join"]
+    C["business_deep_features"] --> B
+    D["dot / cosine / abs diff / product"] --> B
+    E["scalar priors + review context"] --> B
+    B --> F["single LightGBM regressor"]
+    F --> G["predicted rating"]
+```
+
 ## Artifact Layout
 
 Validation run:
@@ -70,7 +82,7 @@ That command:
 
 ## Notes
 
-- The deep bundle is loaded from `content-based/artifacts/competition_embeddings_v3_iter04`
-- The submission script keeps the same feature engineering as validation so the final export is reproducible
-- If you want to force a fixed number of trees, pass `--fixed-n-estimators` to the submission command
-
+- The canonical deep bundle family is now documented around `competition_embeddings_v3_*`
+- This pipeline remains useful as a single-model embedding baseline
+- It is no longer the official competition path
+- The official path is the routed LightGBM stack in `lgbm_raw_router_prefix_deep_v1`

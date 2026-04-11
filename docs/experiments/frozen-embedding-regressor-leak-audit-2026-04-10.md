@@ -2,6 +2,31 @@
 
 Fecha: `2026-04-10`
 
+## Estructura Del Modelo Auditado
+
+```mermaid
+flowchart TD
+    A["frozen user embedding"] --> B["user tower"]
+    C["frozen business embedding"] --> D["business tower"]
+    B --> E["interaction block"]
+    D --> E
+    F["review context"] --> G["review branch"]
+    E --> H["final regression head"]
+    G --> H
+    H --> I["predicted rating"]
+```
+
+## Riesgo Auditado
+
+```mermaid
+flowchart TD
+    A["full-train exported user embedding"] --> B["temporal split downstream"]
+    B --> C["validation row uses fixed user embedding"]
+    C --> D{"embedding contains future reviews?"}
+    D -->|"yes"| E["semantic leakage"]
+    D -->|"own target review included"| F["extreme leakage in short bands"]
+```
+
 ## Hallazgo principal
 
 La anomalia extrema del `frozen_embedding_regressor_v1` no viene de un embedding numericamente corrupto. Viene de usar un embedding de usuario estatico, exportado con historia completa de `train_reviews.csv`, para evaluar despues sobre una validacion temporal extraida de ese mismo `train_reviews.csv`.

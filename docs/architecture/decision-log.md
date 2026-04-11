@@ -2,7 +2,7 @@
 
 - Proposito: registrar decisiones arquitectonicas relevantes, su estado y su impacto sobre codigo, flows y artefactos.
 - Tipo documental: `current`
-- Ultima actualizacion: `2026-04-10`
+- Ultima actualizacion: `2026-04-11`
 
 ## Como Leer Este Log
 
@@ -63,3 +63,27 @@ Estados usados:
   - obligar a regenerar embeddings deep y checkpoints
 - Seguimiento requerido si se implementa:
   - actualizar arquitectura, flows, training, contratos de artefactos y registro de experimentos
+
+## ADR-005: Router prefix-deep para usuarios conocidos de historia corta y media
+
+- Estado: `implemented`
+- Fecha: `2026-04-11`
+- Contexto:
+  - el router `raw_core` + arquetipos mejoro la captura de cold start, pero seguia habiendo margen en usuarios conocidos intermedios
+  - los intentos deep anteriores no daban una mejora estable como scorer global, pero si dejaban un bundle deep utilizable como fuente de embeddings
+  - el run nuevo mostro que el candidato prefix-deep solo merece activarse en `6-20` con un margen minimo de mejora
+- Decision:
+  - mantener `cold_model` para `history_band = 0`
+  - mantener `known_model` como fallback para usuarios conocidos que no entren en la activacion prefix-deep
+  - activar `known_prefix_deep_model` solo para `history_band = 6-20`
+  - considerar `lgbm_raw_router_prefix_deep_v1` como snapshot oficial del router
+- Evidencia:
+  - `validation_mae_rounded = 0.6265079379`
+  - baseline previo `lgbm_raw_router_v1 = 0.6268747449`
+  - `6-20` mejora a `0.6845791340`
+  - `1` empeora a `0.7012391090`
+  - `2-5` mejora a `0.7327732444` pero no supera el margen de activacion
+- Consecuencias:
+  - el router actual queda como combinacion de `raw_core`, arquetipos y prefix-deep
+  - la banda `2-5` sigue siendo la mejor candidata para la siguiente iteracion de perfilado de usuario
+  - los docs de estado, training y artefactos deben tratar `lgbm_raw_router_v1` como referencia historica, no como snapshot oficial vigente

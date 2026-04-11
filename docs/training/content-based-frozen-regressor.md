@@ -2,7 +2,7 @@
 
 - Proposito: fijar el protocolo estable del entrenamiento downstream sobre embeddings congelados.
 - Tipo documental: `current`
-- Ultima actualizacion: `2026-04-10`
+- Ultima actualizacion: `2026-04-11`
 
 ## Objetivo
 
@@ -12,6 +12,8 @@ Comparar modelos downstream sobre embeddings ya exportados para medir utilidad r
 - `business_deep_features`
 - `review_context`
 
+Este flujo sigue siendo oficial para diagnostico y comparacion, pero ya no es el camino activo de submission principal. Esa posicion la ocupa ahora `lgbm_raw_router_prefix_deep_v1`.
+
 ## Scripts Y Codigo Relevante
 
 - script principal:
@@ -20,6 +22,20 @@ Comparar modelos downstream sobre embeddings ya exportados para medir utilidad r
   - [`frozen_embedding_regressor.py`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/model/frozen_embedding_regressor.py)
 - joins y features downstream:
   - [`frozen_embedding_regression.py`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/frozen_embedding_regression.py)
+
+## Estructura Del Modelo
+
+```mermaid
+flowchart TD
+    A["frozen user embedding"] --> B["user tower"]
+    C["frozen business embedding"] --> D["business tower"]
+    B --> E["interaction block"]
+    D --> E
+    F["review context"] --> G["review branch"]
+    E --> H["final regression head"]
+    G --> H
+    H --> I["predicted rating"]
+```
 
 ## Protocolo Estable
 
@@ -59,6 +75,16 @@ Ganador diagnostico sobre embeddings originales:
 - `pairwise_auc = 0.8073`
 - `best_epoch = 18`
 - bundle deep usado: [`competition_embeddings_v3_iter04`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v3_iter04)
+
+## Relacion Con El Router Actual
+
+El frozen regressor quedo como referencia util para medir si el deep export aporta senal reutilizable. El router prefix-deep toma esa idea y la adapta a una politica por bandas:
+
+- mantiene el `cold_model` para `0`
+- mantiene `known_model` como fallback
+- activa `known_prefix_deep_model` solo donde la mejora supera el margen requerido
+
+En otras palabras: el frozen regressor sigue siendo una referencia valida, pero el deliverable competitivo vigente ahora es el router.
 
 ## Flujo Final De Competicion
 

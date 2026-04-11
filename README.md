@@ -1,5 +1,18 @@
 # Recommendation System
 
+> Estado actual: la documentacion canonica vive en `docs/`.
+>
+> La rama content-based ya tiene un router competitivo vigente (`lgbm_raw_router_prefix_deep_v1`) y su estado real se documenta en:
+> - [docs/status/current-state.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/status/current-state.md)
+> - [docs/architecture/content-based-current.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/architecture/content-based-current.md)
+> - [docs/training/content-based-lgbm-raw-router.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-router.md)
+
+> Estado documental: este `README.md` queda como puerta de entrada ligera y legacy-friendly.
+>
+> La documentacion canónica del repositorio vive en:
+> - [docs/README.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/README.md)
+> - [docs/status/current-state.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/status/current-state.md)
+
 A collaborative-filtering recommendation system that implements multiple rating-prediction algorithms, ensemble methods, and evaluation utilities. The project was built for a supervised rating-prediction task (explicit ratings 1–10) and includes both classical and Bayesian matrix-factorisation approaches.
 
 ---

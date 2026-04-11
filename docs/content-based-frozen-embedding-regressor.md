@@ -28,6 +28,20 @@ Inputs:
   - `cool`
   - `date`
 
+## Model diagram
+
+```mermaid
+flowchart TD
+    A["frozen user embedding"] --> B["user tower"]
+    C["frozen business embedding"] --> D["business tower"]
+    B --> E["interaction block"]
+    D --> E
+    F["review context"] --> G["review branch"]
+    E --> H["final regression head"]
+    G --> H
+    H --> I["predicted rating"]
+```
+
 Architecture:
 
 - user tower over the frozen user embedding

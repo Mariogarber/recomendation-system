@@ -2,7 +2,7 @@
 
 - Proposito: definir el contrato principal de artefactos de la rama `content-based`.
 - Tipo documental: `reference`
-- Ultima actualizacion: `2026-04-10`
+- Ultima actualizacion: `2026-04-11`
 
 ## Familias Principales
 
@@ -88,6 +88,38 @@ Ficheros clave:
 - `validation_predictions.csv`
 - `experiment_ranking.csv`
 - `run_summary.json`
+
+### Routed LGBM Router
+
+Ubicacion tipica:
+
+- `content-based/artifacts/lgbm_raw_router_*`
+
+Ficheros clave del snapshot prefix-deep actual:
+
+- `training_summary.json`
+- `validation_summary.json`
+- `validation_predictions.csv`
+- `submission.csv`
+- `feature_manifest.json`
+- `discarded_variables.json`
+- `validation_router_spec.joblib`
+- `submission_router_spec.joblib`
+- `known_validation_model.txt`
+- `known_prefix_validation_model.txt`
+- `cold_validation_model.txt`
+- `known_submission_model.txt`
+- `known_prefix_submission_model.txt`
+- `cold_submission_model.txt`
+- `archetype_profiles.csv`
+
+Snapshot recomendado hoy:
+
+- [`lgbm_raw_router_prefix_deep_v1`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/lgbm_raw_router_prefix_deep_v1)
+
+Snapshot historico de referencia:
+
+- [`lgbm_raw_router_v1`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/lgbm_raw_router_v1)
 
 ## Regla De Alineacion
 

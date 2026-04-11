@@ -1,8 +1,12 @@
 # Documentacion Del Repositorio
 
+## Estado Vigente
+
+La rama content-based ya no se describe solo por el deep export y el frozen regressor. El estado actual tambien incluye el router `lgbm_raw_router_prefix_deep_v1`, que es la referencia oficial hoy para la competencia.
+
 - Proposito: indice maestro y punto de entrada canónico de la documentacion.
 - Tipo documental: `current`
-- Ultima actualizacion: `2026-04-10`
+- Ultima actualizacion: `2026-04-11`
 
 ## Como navegar esta documentacion
 
@@ -30,6 +34,7 @@ Los `README.md` del repositorio y de cada modulo son hubs de entrada cortos. La 
 
 - [Deep User De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-deep-user.md)
 - [Frozen Regressor De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-frozen-regressor.md)
+- [LGBM Raw Router De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-router.md)
 
 ## Referencia
 
@@ -46,6 +51,7 @@ Los `README.md` del repositorio y de cada modulo son hubs de entrada cortos. La 
 
 - [Registro Oficial De Runs Y Snapshots](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/registry.md)
 - [Log Deep User De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/content-based-deep-user-log.md)
+- [Raw Router Prefix Deep 2026-04-11](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/raw-router-prefix-deep-2026-04-11.md)
 
 ## Propuestas
 
