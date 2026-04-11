@@ -1,8 +1,18 @@
 # Content-Based Recommendation Plan
 
+> Documento legacy. Para estado vigente y siguientes ideas usar:
+> - [docs/status/current-state.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/status/current-state.md)
+> - [docs/proposals/content-based-next-ideas.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/proposals/content-based-next-ideas.md)
+
 This document defines a concrete plan for the content-based branch of the competition.
 The objective is to predict the rating that a user will give to a business while being
 careful with leakage, cold start, and evaluation quality.
+
+Status note:
+
+- the manual business and user builders are already implemented
+- the deep competition embeddings pipeline is already implemented
+- the remaining work is centered on leak-safe baselines, final scoring, and cold-start policy
 
 ## 1. Main principles
 

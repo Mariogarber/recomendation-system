@@ -1,6 +1,12 @@
 ﻿# Guia de features del sistema content-based
 
 Esta guia documenta como se construyen y como se deben interpretar las features del modulo [`content-based`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based).
+Hoy conviene leerla con tres ideas en mente:
+
+- existe una familia manual de usuario
+- existe una familia profunda de usuario ya implementada
+- el reporte de embeddings es diagnostico, no baseline final
+
 El objetivo es que puedas entender:
 
 - que representa cada bloque de features de negocio
@@ -8,6 +14,7 @@ El objetivo es que puedas entender:
 - como se calculan
 - como activar o desactivar partes de la representacion
 - como manipular las matrices sin mezclar senal segura con variables con riesgo de leakage
+- como interpretar los defaults reales de los builders y del runner de competicion
 
 ## 1. Idea general del pipeline
 
@@ -25,6 +32,7 @@ La construccion esta implementada en:
 
 - [`content-based/utils/business_representation.py`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/business_representation.py)
 - [`content-based/utils/user_representation.py`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/user_representation.py)
+- [`content-based/utils/deep_user_embeddings.py`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/deep_user_embeddings.py)
 - [`content-based/utils/business_features.py`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/business_features.py)
 
 ## 2. Features de negocio
@@ -341,6 +349,12 @@ Si faltan timestamps, cae a pesos uniformes.
 - Eso permite usar similitud directa usuario-item.
 - Si usas `business_view="full"`, el perfil del usuario mezcla gustos semanticos y exposicion a items populares o bien valorados.
 
+#### Defaults reales
+
+- el builder manual por defecto usa `business_view="content"`
+- la corrida de competicion usa `business_view="full"` para el bundle manual
+- el `feature_metadata` y `user_profile_summary` ya registran la vista real usada en la invocacion, incluyendo `business_view`, `business_blocks` y `profile_source`
+
 #### Como manejarlo
 
 - Para recomendacion content-based pura, empieza con `business_view="content"`.
@@ -396,6 +410,24 @@ La razon es evitar leakage o una dependencia excesiva de agregados poco fiables 
 - Si quieres una version content-based estricta, puedes desactivarlo con `--no-metadata`.
 - Si quieres un regresor final de rating, suele tener sentido comparar con y sin metadata.
 - Como esta separado en su propia matriz, es facil escalarlo o regularizarlo aparte.
+
+### 3.3 Bloque profundo de competicion
+
+La corrida de competicion usa un encoder profundo de usuario que ya existe en codigo.
+
+Puntos clave:
+
+- la entrada base del negocio es `business_full_features`
+- el runner de competicion usa `business_view="full"` tanto para la rama manual como para la rama profunda
+- el encoder profundo usa validacion temporal interna y exporta embeddings densos por `user_id`
+- el resumen profundo distingue `history`, `metadata_only` y `default_only`
+- el resumen profundo ahora expone `user_feature_source`, `business_feature_source`, `temporal_validation_protocol` y `export_history_source`
+
+Interpretacion importante:
+
+- `best_val_mae` en `user_deep_summary.json` es la validacion interna del entrenamiento
+- la tabla de utilidad del reporte es un diagnostico post-export, no una comparacion final de produccion
+- si un embed se calcula sobre un snapshot ya entrenado y luego se mide sobre un split temporal del mismo train, la lectura debe ser cauta porque no es una baseline leak-free completa
 
 ## 4. Convencion de nombres
 
@@ -472,7 +504,7 @@ Los mas utiles para depurar son:
 - `user_feature_names.json`
 - `user_feature_metadata.csv`
 - `clean_user_table.parquet`
-- `user_profile_summary.json`
+- `user_profile_summary.json`, que ahora incluye `business_view`, `business_blocks` y `profile_source`
 
 ## 6. Como cargar y manipular las matrices
 
@@ -643,6 +675,17 @@ Cuando anadas nuevas features, preguntate siempre:
 - esto esta disponible antes de predecir
 - o resume interacciones futuras respecto a mi split de train
 
+### Reportes y metricas
+
+El `embedding_quality_report` mezcla cobertura, salud numerica, coherencia semantica y utilidad.
+No lo leas como una baseline final de produccion sin mirar el origen de cada numero.
+
+Advertencias practicas:
+
+- la cobertura de negocio puede subir despues de imputar `state`, `city`, `latitude` y `longitude`
+- la utilidad post-export usa un scorer ligero sobre artefactos ya exportados, asi que es diagnostica y no sustituye a una evaluacion leak-free completa
+- `MAE temporal oficial deep` es la mejor validacion interna del entrenamiento profundo, no el mismo objeto que la tabla de utilidad
+
 ### Cold start
 
 Tu dataset tiene mucho `new_user_known_item`.
@@ -677,5 +720,7 @@ Las menos interpretables son:
 
 - [Content-Based README](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/README.md)
 - [Project Status](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/project-status.md)
+- [Embedding Quality Report Guide](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/embedding_quality_report_guide.md)
 - [Business builder](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_business_representation.py)
 - [User builder](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_user_representation.py)
+- [Competition builder](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_competition_embeddings.py)

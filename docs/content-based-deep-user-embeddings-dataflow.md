@@ -1,12 +1,22 @@
 # Anexo tecnico: flujo de datos para `user_deep_embeddings`
 
-Este documento fija el flujo de datos que debe seguir una futura implementacion del encoder profundo de usuario.
+> Documento legacy. La version canónica del flujo y del contrato de artefactos vive en:
+> - [docs/flows/content-based-pipeline.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/flows/content-based-pipeline.md)
+> - [docs/reference/content-based-artifacts.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/content-based-artifacts.md)
+
+Este documento fija el flujo de datos del encoder profundo de usuario tal y como ya esta implementado en la rama content-based.
 Su objetivo es evitar ambiguedades sobre:
 
 - que entra al modelo
 - como se construyen las muestras
 - como se evita leakage temporal
 - como se exportan los embeddings finales
+
+Nota de estado:
+
+- la exportacion real vive en `content-based/utils/deep_user_embeddings.py`
+- la orquestacion de la corrida vive en `content-based/build_competition_embeddings.py`
+- el flujo sigue siendo util como contrato para auditoria y debugging
 
 ## 1. Nombres y familias de artefactos
 

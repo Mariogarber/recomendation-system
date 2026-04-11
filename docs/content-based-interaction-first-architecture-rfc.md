@@ -1,5 +1,8 @@
 # RFC: arquitectura interaction-first para content-based
 
+> Documento legacy. La propuesta canónica actual vive en:
+> - [docs/proposals/content-based-interaction-first.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/proposals/content-based-interaction-first.md)
+
 Este documento describe una nueva arquitectura propuesta para la rama [`content-based`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based), distinta del modelo profundo actualmente implementado.
 
 La idea central es cambiar el orden del procesamiento:

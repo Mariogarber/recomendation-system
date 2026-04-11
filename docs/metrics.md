@@ -1,5 +1,8 @@
 # Metrics Reference
 
+> Documento legacy. La referencia actual vive en:
+> - [docs/reference/collaborative-filtering-metrics.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/collaborative-filtering-metrics.md)
+
 All metric utilities live under `colaborative-filtering/metric/`.
 
 ---

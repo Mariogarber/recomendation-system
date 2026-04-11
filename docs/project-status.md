@@ -1,8 +1,9 @@
 # Project Status
 
-This document is the living status report for the whole repository.
-It should describe the current state of the project as it actually exists in code,
-not only the intended design.
+> Documento legacy. La fuente canónica actual es:
+> - [docs/status/current-state.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/status/current-state.md)
+
+This document is the living status report for the whole repository. It should describe the current state of the project as it actually exists in code, not only the intended design.
 
 ## Project Goal
 
@@ -11,7 +12,7 @@ The current working task is:
 
 - predict the rating a user will give to a business
 
-The main evaluation metric for the current content-based dataset is:
+The main evaluation metric for the content-based work is:
 
 - `MAE`
 
@@ -50,7 +51,7 @@ Directory:
 
 - [content-based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based)
 
-This branch is under active development and has recently moved from rough planning to reusable code.
+This branch is now in an implemented and diagnostic state: the manual builders exist, the deep competition pipeline exists, and the quality report is generated from real exported artifacts.
 
 Main documents:
 
@@ -58,9 +59,11 @@ Main documents:
 - [Content-Based Plan](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/PLAN.md)
 - [Technical Checklist](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/TECHNICAL_CHECKLIST.md)
 - [Content-Based Feature Guide](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-features-guide.md)
+- [Embedding Quality Report Guide](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/embedding_quality_report_guide.md)
 - [Deep User Embeddings RFC](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-rfc.md)
 - [Deep User Embeddings Dataflow](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-dataflow.md)
 - [Deep User Embeddings Experiments](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-experiments.md)
+- [Deep User Model Flow](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-model-flow.md)
 
 ## Current Content-Based Status
 
@@ -74,19 +77,21 @@ Main documents:
 - minimal base model abstraction
 - executable Phase 1 audit script
 - business representation V1 builder
-- user representation V1 builder
-- persistence of business representation artifacts
-- persistence of user representation artifacts
+- manual user representation V1 builder
+- deep competition embeddings pipeline
+- competition embedding quality report generator
+- report utility now separates honest validation from post-export diagnostics
+- persistence of business, manual user, and deep user artifacts
 
-### Not Yet Implemented
+### Still Pending as Formal Modeling Work
 
 - leakage-safe baselines for the content-based branch
-- business-to-user similarity scoring
+- business-to-user similarity scoring as a standalone baseline
 - supervised content-based regressor
-- segmented evaluation pipeline for content-based models
+- segmented evaluation pipeline for content-based models outside the report
 - explicit cold-start prediction policy
 
-There is now also a pre-implementation deep-user-embedding proposal documented as an RFC with dedicated dataflow and experiment annexes. This proposal does not replace the current builder yet; it defines a future parallel learned user-embedding family.
+There is now also a deep-user-embedding implementation, not just a proposal. The RFC and annexes remain useful as design documentation, but the code now exists in `content-based/utils/deep_user_embeddings.py` and is wired through `build_competition_embeddings.py`.
 
 ## Dataset Facts Already Established
 
@@ -129,6 +134,7 @@ Current modeling consequence:
 
 - direct raw aggregates from metadata are considered risky
 - business priors should be recomputed from `train_reviews.csv`
+- any report or scorer that reuses exported embeddings over a temporal split should be treated as diagnostic unless the embedding construction itself is prefix-safe
 
 ### Business Metadata Coverage
 
@@ -139,7 +145,7 @@ Current modeling consequence:
 - unique cities: `776`
 - unique flattened attribute keys: `87`
 
-This is why the business representation is currently the center of the content-based branch.
+This is why the business representation remains the center of the content-based branch.
 
 ## Current Business Representation V1
 
@@ -219,7 +225,8 @@ And exposed in these matrices:
 - default aggregation is centered weighting
 - single-review users fall back to a simple positive profile
 - zero-sum centered profiles fall back to a simple positive profile
-- default business source is the business `content` view
+- the builder default is the business `content` view
+- the competition runner overrides that and uses `full` for the manual bundle
 - safe user metadata is added as a separate calibration block
 
 Current metadata block candidates included in code:
@@ -255,6 +262,41 @@ Metadata coverage note:
 
 - exactly one train user is absent from `usuarios.csv`: `ufZfni7nb_KdJC6DXNfVHQ`
 - the current builder keeps that user in the profile matrix and fills metadata defaults
+
+## Current Deep Competition Pipeline
+
+The deep pipeline is currently implemented and used for offline competition bundles.
+
+Key files:
+
+- [deep_user_embeddings.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/deep_user_embeddings.py)
+- [build_competition_embeddings.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_competition_embeddings.py)
+- [analyze_embeddings_report.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/analyze_embeddings_report.py)
+
+Current defaults in the competition runner:
+
+- manual user bundle uses `business_view="full"`
+- deep user encoder uses `business_view="full"`
+- metadata is included by default in both families
+- temporal validation is used during deep training
+
+Exported deep outputs:
+
+- `user_deep_features.npz`
+- `business_deep_features.npz`
+- `user_deep_ids.csv`
+- `business_deep_ids.csv`
+- `user_deep_summary.json`
+- `deep_user_encoder_checkpoint.pt`
+
+The report also exports diagnostic CSVs for:
+
+- coverage and health
+- utility
+- business coherence
+- user consistency
+- clustering
+- social homophily
 
 ## Available Content-Based Scripts
 
@@ -313,14 +355,34 @@ Example:
 python .\content-based\build_user_representation.py --save-dir .\content-based\artifacts\user_repr_v1
 ```
 
+### Competition Embeddings Builder
+
+Script:
+
+- [build_competition_embeddings.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_competition_embeddings.py)
+
+Purpose:
+
+- build the business bundle
+- build the manual user bundle
+- train the deep user bundle
+- export a competition-ready artifact tree
+
+Example:
+
+```powershell
+python .\content-based\build_competition_embeddings.py --save-root .\content-based\artifacts\competition_embeddings_v1
+```
+
 ## Existing Artifacts
 
 An example artifact directory already exists:
 
 - [business_repr_v1_smoke](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/business_repr_v1_smoke)
 - [user_repr_v1_smoke](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/user_repr_v1_smoke)
+- [competition_embeddings_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v1)
 
-Artifacts currently produced by the builder:
+Artifacts currently produced by the builders:
 
 - `business_ids.csv`
 - `business_content_features.npz`
@@ -332,7 +394,7 @@ Artifacts currently produced by the builder:
 - `business_prior_leakage_summary.json`
 - `business_prior_leakage_details.csv`
 - `business_representation_summary.json`
-- `clean_business_table.parquet`
+- `clean_business_table.parquet` or `clean_business_table.csv`
 - `user_ids.csv`
 - `user_profile_features.npz`
 - `user_metadata_features.npz`
@@ -342,17 +404,28 @@ Artifacts currently produced by the builder:
 - `user_profile_summary.json`
 - `user_metadata_audit_summary.json`
 - `user_metadata_audit_details.csv`
-- `clean_user_table.parquet`
+- `clean_user_table.parquet` or `clean_user_table.csv`
+- `user_deep_ids.csv`
+- `business_deep_ids.csv`
+- `user_deep_features.npz`
+- `business_deep_features.npz`
+- `user_deep_feature_names.json`
+- `user_deep_feature_metadata.csv`
+- `business_deep_feature_metadata.csv`
+- `user_deep_summary.json`
+- `user_deep_clean_table.parquet` or `user_deep_clean_table.csv`
+- `business_deep_clean_table.parquet` or `business_deep_clean_table.csv`
+- `deep_user_encoder_checkpoint.pt`
 
 ## Recommended Next Steps
 
 From the current state of the repository, the next logical tasks are:
 
 1. Implement leakage-safe baselines for the content-based branch
-2. Build user profiles from train interactions and business content vectors
-3. Add simple similarity-based scoring
-4. Add supervised regression using user profile + business features
-5. Add segmented MAE reporting, especially for new users
+2. Add a standalone similarity scorer that does not reuse post-export diagnostics
+3. Add supervised regression using user profile + business features
+4. Add segmented MAE reporting for any final model
+5. Define an explicit cold-start policy in prediction code
 
 ## Documentation Maintenance
 
@@ -369,5 +442,5 @@ Recommended documentation update points:
 
 - `docs/project-status.md`: global snapshot
 - `content-based/README.md`: module-specific technical state
-- `content-based/PLAN.md`: intended future design
+- `content-based/PLAN.md`: intended future design or historical roadmap
 - `content-based/TECHNICAL_CHECKLIST.md`: execution progress

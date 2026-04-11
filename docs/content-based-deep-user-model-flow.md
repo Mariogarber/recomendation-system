@@ -1,5 +1,8 @@
 # Guia Corta Del Flujo Del Modelo Profundo De Usuario
 
+> Documento legacy. El flujo canónico actual vive en:
+> - [docs/flows/content-based-pipeline.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/flows/content-based-pipeline.md)
+
 ## Objetivo
 
 Este modelo no aprende solo embeddings de usuario. Aprende dos cosas a la vez:
@@ -11,6 +14,12 @@ Este modelo no aprende solo embeddings de usuario. Aprende dos cosas a la vez:
   - la metadata segura del usuario
 
 El objetivo final del entrenamiento es predecir `rating`.
+
+Nota de estado:
+
+- este flujo es el que usa hoy `content-based/build_competition_embeddings.py`
+- el encoder profundo ya exporta `user_deep_features` y `business_deep_features`
+- el resumen de entrenamiento y los fallbacks `history`, `metadata_only` y `default_only` ya existen en el codigo
 
 ## Idea Principal
 

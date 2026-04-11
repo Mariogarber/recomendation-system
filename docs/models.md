@@ -1,5 +1,8 @@
 # Models Reference
 
+> Documento legacy. La referencia actual vive en:
+> - [docs/reference/collaborative-filtering-models.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/collaborative-filtering-models.md)
+
 All models live under `colaborative-filtering/model/` and share a common base class.
 
 ---

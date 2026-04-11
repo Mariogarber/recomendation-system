@@ -1,5 +1,8 @@
 # Guia Corta Del Flujo De La Arquitectura Interaction-First
 
+> Documento legacy. La propuesta canónica actual vive en:
+> - [docs/proposals/content-based-interaction-first.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/proposals/content-based-interaction-first.md)
+
 ## Idea principal
 
 La propuesta `interaction-first` cambia una idea clave del modelo actual:

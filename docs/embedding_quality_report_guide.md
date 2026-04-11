@@ -1,6 +1,21 @@
-# Guía de interpretación del reporte de calidad de embeddings
+# Guia de interpretacion del reporte de calidad de embeddings
 
-Este documento explica, sección por sección, el HTML generado por [`content-based/analyze_embeddings_report.py`](../content-based/analyze_embeddings_report.py) y guardado en `content-based/artifacts/competition_embeddings_v1/report_final/embedding_quality_report.html`.
+> Guia vigente y enlazada desde el flujo canónico:
+> - [docs/flows/content-based-pipeline.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/flows/content-based-pipeline.md)
+
+Lectura actual del reporte:
+
+- el bundle deep ya existe y el reporte lo usa de verdad
+- la tabla de utilidad es un diagnóstico post-export, no una baseline final leak-free
+- la validación interna del encoder profundo y el scorer ligero del reporte no son exactamente la misma cosa
+- la cobertura y la salud del espacio sirven para detectar fallos, pero no sustituyen a una evaluación formal de producción
+
+Este documento explica, seccion por seccion, el HTML generado por [`content-based/analyze_embeddings_report.py`](../content-based/analyze_embeddings_report.py) y guardado dentro del snapshot deep que se este analizando.
+
+Hoy las referencias operativas relevantes son:
+
+- [`competition_embeddings_v3_iter03`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v3_iter03)
+- [`competition_embeddings_v3_iter04`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v3_iter04)
 
 La idea es que el informe no se lea solo como un conjunto de tablas bonitas, sino como una herramienta para decidir si los embeddings sirven para competir, dónde fallan y qué conviene mejorar.
 
@@ -74,17 +89,38 @@ Si la cobertura de `history` es alta y el número de `default_only` es casi nulo
 
 ## 3. Utilidad Para La Tarea Final
 
+Esta seccion mezcla tres cosas que conviene no confundir:
+
+- la validacion interna del encoder profundo durante entrenamiento
+- el scorer ligero post-export usado en el reporte
+- el corte temporal sobre `train_reviews` aplicado para diagnostico
+
+Eso significa que la tabla sirve para comparar tendencias y sanity checks, pero no debe venderse como una baseline final leak-free.
+
+En la salida actual hay dos tablas distintas:
+
+- `utility_honest_validation.csv`: validacion temporal interna del encoder profundo
+- `utility_post_export_diagnostics.csv`: diagnostico sobre embeddings exportados con un scorer ligero
+
 Esta es una de las secciones mas importantes porque conecta los embeddings con la competicion.
 
 ### Que incluye
 
-La tabla `Comparativa de scorers` compara tres espacios:
+La seccion ahora separa dos vistas:
+
+- `Validacion honesta del encoder profundo`
+- `Diagnostico post-export sobre el snapshot temporal`
+
+La vista honesta usa:
+
+- `deep_user_encoder original`
+
+La vista diagnostica usa:
 
 - `manual_profile + business_full`
 - `user_deep + business_deep`
-- `deep_user_encoder original`
 
-Las metricas son:
+Las metricas mostradas son:
 
 - `MAE`
 - `RMSE`
@@ -309,8 +345,9 @@ El HTML final se genera desde:
 
 - [`content-based/analyze_embeddings_report.py`](../content-based/analyze_embeddings_report.py)
 
-Y los artefactos de salida viven en:
+Y los artefactos de salida viven dentro del snapshot deep analizado. Hoy las referencias activas son:
 
-- `content-based/artifacts/competition_embeddings_v1/report_final/`
+- `content-based/artifacts/competition_embeddings_v3_iter03/`
+- `content-based/artifacts/competition_embeddings_v3_iter04/`
 
 Si una seccion cambia en el script, esta guia deberia actualizarse para conservar la correspondencia uno a uno entre metricas y significado.

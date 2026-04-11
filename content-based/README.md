@@ -1,8 +1,18 @@
-# Content-Based Branch
+# Content-Based
 
-This document is the living documentation for the `content-based/` module.
-Its purpose is to describe what exists today, how it works, what has been validated,
-which artifacts are produced, and what is still missing.
+> Estado documental: este archivo pasa a ser un hub corto y legacy-friendly.
+>
+> La documentacion canónica del modulo vive en:
+> - [docs/architecture/content-based-current.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/architecture/content-based-current.md)
+> - [docs/flows/content-based-pipeline.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/flows/content-based-pipeline.md)
+> - [docs/training/content-based-deep-user.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-deep-user.md)
+> - [docs/training/content-based-frozen-regressor.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-frozen-regressor.md)
+> - [docs/training/content-based-gbm-blend.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-gbm-blend.md)
+> - [docs/training/content-based-lgbm-raw-features.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-features.md)
+> - [docs/training/content-based-lgbm-deep-embeddings.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-deep-embeddings.md)
+> - [docs/training/content-based-lgbm-raw-router.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-router.md)
+
+This document is the living documentation for the `content-based/` module. It reflects what is implemented today, how the manual and deep embedding families are built, and what the current report can and cannot prove.
 
 ## Goal
 
@@ -12,28 +22,35 @@ The goal of the content-based branch is to predict the rating a user will give t
 - building user preferences from previously rated businesses
 - scoring candidate businesses against those user profiles
 
-The main metric is:
+The main metric remains:
 
 - `MAE`
 
 ## Current Development State
 
-The branch is in an intermediate but useful state:
+The branch is now beyond the first manual-only prototype:
 
 - Data audit is implemented
 - Leakage analysis is implemented
 - Business metadata parsers are implemented
 - Business representation V1 is implemented
 - User representation V1 is implemented
-- Final content-based scoring and regression are not implemented yet
+- The competition deep-user pipeline is implemented
+- The embedding quality report is implemented as an offline diagnostic
+- A competition-oriented downstream scorer over frozen deep embeddings is implemented
+- A hybrid competition submission path over deep predictions plus a GBM fallback is implemented
+- Two standalone LightGBM competition baselines are implemented:
+  - raw tabular features only
+  - deep embeddings plus scalar priors
+- A routed LightGBM stack over `raw_core` plus metadata-driven user archetypes is implemented
 
 In checklist terms:
 
 - Phase 1: done
-- Phase 2: pending
 - Phase 3: done
-- Phase 4 core builder: done
-- Phase 5+: pending
+- Phase 4 manual profile: done
+- Phase 4 deep competition embeddings: done
+- Phase 2, Phase 5, and Phase 6: still pending as formal, leak-safe prediction work
 
 See also:
 
@@ -41,11 +58,31 @@ See also:
 - [Technical Checklist](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/TECHNICAL_CHECKLIST.md)
 - [Project Status](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/project-status.md)
 - [Feature Guide](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-features-guide.md)
+- [Embedding Quality Report Guide](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/embedding_quality_report_guide.md)
 - [Deep User Embeddings RFC](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-rfc.md)
 - [Deep User Embeddings Dataflow](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-dataflow.md)
 - [Deep User Embeddings Experiments](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-experiments.md)
-- [Interaction-First Architecture RFC](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-interaction-first-architecture-rfc.md)
-- [Interaction-First Flow Guide](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-interaction-first-flow.md)
+- [Deep User Model Flow](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-model-flow.md)
+- [Frozen Embedding Regressor](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-frozen-embedding-regressor.md)
+- [GBM Blend Training Note](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-gbm-blend.md)
+
+## Current Competition Submission Path
+
+The active competition export path is now hybrid:
+
+- deep submission: `content-based/artifacts/frozen_embedding_submission_v1/submission.csv`
+- GBM submission: `content-based/artifacts/gbm_submission_v1/submission.csv`
+- final blended submission: `content-based/artifacts/blended_submission_v1/submission.csv`
+
+Prediction rule:
+
+- known train users: average the already rounded deep and GBM stars, then round half-up
+- new users: use the GBM star directly
+
+Current deliverable columns:
+
+- `review_id`
+- `stars`
 
 ## Dataset Used By This Module
 
@@ -70,7 +107,7 @@ Current audited summary:
 
 ### 1. The dataset is extremely sparse
 
-This makes pure interaction-based history weak for many users and increases the value of a strong business representation.
+This makes pure interaction history weak for many users and increases the value of a strong business representation.
 
 ### 2. Cold start is mainly a user problem
 
@@ -87,7 +124,7 @@ This means the project should prioritize:
 - sensible new-user behavior
 - explicit cold-start evaluation
 
-### 3. Some metadata is likely leakage-prone
+### 3. Some metadata is leakage-prone if used raw
 
 Business metadata compared with aggregates recomputed only from `train_reviews.csv` shows:
 
@@ -178,7 +215,7 @@ Files:
 - [business_representation.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/business_representation.py)
 - [build_business_representation.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_business_representation.py)
 
-This is currently the most advanced part of the content-based branch.
+This is the main business-side representation used by both the manual and deep user pipelines.
 
 It builds separate blocks for:
 
@@ -194,7 +231,7 @@ The representation explicitly separates:
 - `prior_matrix`
 - `full_matrix`
 
-Current V1 output summary:
+Current validated smoke-test output:
 
 - businesses: `30,069`
 - content features: `871`
@@ -244,7 +281,8 @@ Core design choices implemented:
   - `weight = rating - mean_user_rating_train`
 - single-review users fall back to a simple positive weight
 - zero-sum centered profiles fall back to a simple positive weight
-- the default business source is `business_view="content"`
+- the builder default is `business_view="content"`
+- the competition pipeline overrides that and uses `business_view="full"` for the manual bundle
 - business priors are not mixed into the pure taste profile by default
 - safe user metadata is stored as a separate block
 
@@ -291,6 +329,96 @@ Current metadata coverage note:
 
 - `usuarios.csv` is missing exactly one train user: `ufZfni7nb_KdJC6DXNfVHQ`
 - the builder still creates that user profile and fills metadata defaults when needed
+
+### Deep Competition Embeddings
+
+Files:
+
+- [deep_user_embeddings.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/deep_user_embeddings.py)
+- [build_competition_embeddings.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_competition_embeddings.py)
+- [analyze_embeddings_report.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/analyze_embeddings_report.py)
+
+This pipeline is implemented and exports a second family of user embeddings:
+
+- `user_deep_features`
+- `business_deep_features`
+
+Important defaults in the competition script:
+
+- manual user bundle uses `business_view="full"`
+- deep user encoder uses `business_view="full"`
+- both pipelines keep `include_metadata=True` unless disabled explicitly
+
+The deep pipeline:
+
+- trains a business tower on the existing business representation
+- uses temporal validation during training
+- learns a dense user embedding from history + ratings + safe metadata
+- exports `history`, `metadata_only`, and `default_only` coverage in `user_deep_summary.json`
+
+Latest iterative search on the current codebase:
+
+- recommended exported embedding bundle: [competition_embeddings_v3_iter03](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v3_iter03)
+- recommended training-head reference bundle: [competition_embeddings_v3_iter04](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v3_iter04)
+- detailed loop notes: [content-based-deep-user-embeddings-experiments.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-experiments.md)
+- the report now separates `utility_honest_validation.csv` from `utility_post_export_diagnostics.csv`
+
+### Downstream Frozen Regressor
+
+Files:
+
+- [train_frozen_embedding_regressor.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/train_frozen_embedding_regressor.py)
+- [frozen_embedding_regressor.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/model/frozen_embedding_regressor.py)
+- [frozen_embedding_regression.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/frozen_embedding_regression.py)
+
+This downstream pipeline is now implemented.
+
+It trains a rating regressor on top of:
+
+- frozen `user_deep_features`
+- frozen `business_deep_features`
+- inference-safe review-context features:
+  - `useful`
+  - `funny`
+  - `cool`
+  - `date`
+
+Current references:
+
+- diagnostic run only: [frozen_embedding_regressor_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_regressor_v1)
+- honest held-out run: [frozen_embedding_regressor_honest_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_regressor_honest_v1)
+
+Current status:
+
+- the downstream scorer is implemented and reproducible
+- a full-train competition submission flow is implemented on top of the best leaky downstream run
+- the honest run does not yet beat the Ridge baseline on `MAE`
+- the honest baseline and the best trainable run are documented in [Frozen Embedding Regressor](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-frozen-embedding-regressor.md)
+- the current competition submission artifact is [frozen_embedding_submission_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_submission_v1)
+- the final rounded CSV is [submission.csv](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_submission_v1/submission.csv)
+
+### Competition Submission Flow
+
+Files:
+
+- [train_frozen_embedding_submission_model.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/train_frozen_embedding_submission_model.py)
+- [predict_frozen_embedding_submission.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/predict_frozen_embedding_submission.py)
+
+This flow is intentionally competition-oriented and uses the original full embedding exports.
+
+Current default:
+
+- source run: `iter04_with_review`
+- embedding bundle: [competition_embeddings_v3_iter04](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v3_iter04)
+- final full-train epochs: `18`
+- review-context enabled: `true`
+
+The inference script writes a competition-ready CSV with exactly:
+
+- `ids`
+- `prediction`
+
+Predictions are clipped to `[1, 5]` and rounded before export.
 
 ### Minimal BaseModel
 
@@ -362,12 +490,57 @@ Main configurable parameters:
   - `--geo-cluster-count`
   - `--no-business-priors`
 
+### Build Competition Embeddings
+
+Command:
+
+```powershell
+python .\content-based\build_competition_embeddings.py --save-root .\content-based\artifacts\competition_embeddings_v1
+```
+
+Purpose:
+
+- build the business bundle
+- build the manual user bundle
+- train and export the deep user bundle
+- save a single competition-ready artifact tree
+
+### Train Final Frozen Submission Model
+
+Command:
+
+```powershell
+python .\content-based\train_frozen_embedding_submission_model.py --device cuda
+```
+
+Purpose:
+
+- load the winning leaky downstream configuration from `iter04_with_review`
+- train the final model on all original `train_reviews.csv`
+- save the checkpoint, full-train summary, and review-context transforms
+
+### Generate Competition Submission
+
+Command:
+
+```powershell
+python .\content-based\predict_frozen_embedding_submission.py --device cuda
+```
+
+Purpose:
+
+- load the final frozen submission checkpoint
+- score all rows from the original `test_reviews.csv`
+- save a rounded competition CSV in `ids,prediction` format
+
 ## Artifacts Produced Today
 
-Example artifact directory already generated:
+Example artifact directories already generated:
 
 - [business_repr_v1_smoke](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/business_repr_v1_smoke)
 - [user_repr_v1_smoke](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/user_repr_v1_smoke)
+- [competition_embeddings_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v1)
+- [frozen_embedding_submission_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_submission_v1)
 
 Files produced by the business representation builder:
 
@@ -381,7 +554,7 @@ Files produced by the business representation builder:
 - `business_prior_leakage_summary.json`
 - `business_prior_leakage_details.csv`
 - `business_representation_summary.json`
-- `clean_business_table.parquet`
+- `clean_business_table.parquet` or `clean_business_table.csv` when parquet is unavailable
 
 Files produced by the user representation builder:
 
@@ -394,19 +567,47 @@ Files produced by the user representation builder:
 - `user_profile_summary.json`
 - `user_metadata_audit_summary.json`
 - `user_metadata_audit_details.csv`
-- `clean_user_table.parquet`
+- `clean_user_table.parquet` or `clean_user_table.csv` when parquet is unavailable
+
+Files produced by the competition deep pipeline:
+
+- `business_repr/`
+- `user_manual_repr/`
+- `user_deep_repr/`
+
+The deep bundle exports:
+
+- `user_deep_ids.csv`
+- `business_deep_ids.csv`
+- `user_deep_features.npz`
+- `business_deep_features.npz`
+- `user_deep_feature_names.json`
+- `user_deep_feature_metadata.csv`
+- `business_deep_feature_metadata.csv`
+- `user_deep_summary.json`
+- `user_deep_clean_table.parquet` or `user_deep_clean_table.csv`
+- `business_deep_clean_table.parquet` or `business_deep_clean_table.csv`
+- `deep_user_encoder_checkpoint.pt`
+
+Files produced by the competition submission flow:
+
+- `checkpoint.pt`
+- `config.json`
+- `train_summary.json`
+- `review_context_summary.json`
+- `submission_summary.json`
+- `submission.csv`
 
 ## What Is Not Implemented Yet
 
-The following parts are still missing:
+The following parts are still missing as formal prediction work:
 
 - leakage-safe baseline models for the content-based branch
 - business-only ablation runner
-- similarity scoring between user profile and candidate business
-- supervised regression on top of user profile + business features
-- segmented MAE evaluation for content-based models
+- similarity scoring between user profile and candidate business as a standalone baseline
+- segmented MAE evaluation for content-based models outside the diagnostic report
 - explicit cold-start policy in prediction code
-- empirical comparison of user-profile aggregation variants
+- empirical comparison of user-profile aggregation variants as a tracked experiment suite
 
 ## Documentation Maintenance
 
@@ -418,7 +619,7 @@ This file should be updated whenever one of these happens:
 - a new artifact type is introduced
 - a phase from the checklist is completed
 
-When updating this document, try to keep four sections in sync:
+When updating this document, keep these sections in sync:
 
 - `Current Development State`
 - `Main Findings So Far`

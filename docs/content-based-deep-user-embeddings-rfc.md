@@ -1,6 +1,18 @@
 # RFC: encoder profundo de usuario para content-based
 
-Este documento define la propuesta de arquitectura para una segunda familia de embeddings de usuario dentro de la rama [`content-based`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based), previa a cualquier implementacion de codigo.
+> Documento legacy. La arquitectura vigente se mantiene en:
+> - [docs/architecture/content-based-current.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/architecture/content-based-current.md)
+>
+> El protocolo estable de entrenamiento vive en:
+> - [docs/training/content-based-deep-user.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-deep-user.md)
+
+Este documento define la arquitectura de la segunda familia de embeddings de usuario dentro de la rama [`content-based`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based).
+
+Nota de estado:
+
+- la arquitectura ya esta implementada en `content-based/utils/deep_user_embeddings.py`
+- la corrida de competicion se hace desde `content-based/build_competition_embeddings.py`
+- este documento conserva el valor de contrato de diseno y de explicacion del pipeline actual
 
 La idea principal es mantener la representacion actual de usuario basada en agregacion manual y, en paralelo, anadir una familia nueva de embeddings aprendidos con deep learning.
 
