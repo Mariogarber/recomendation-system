@@ -11,6 +11,8 @@
 > - [docs/training/content-based-lgbm-raw-features.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-features.md)
 > - [docs/training/content-based-lgbm-deep-embeddings.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-deep-embeddings.md)
 > - [docs/training/content-based-lgbm-raw-router.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-router.md)
+> - [docs/training/content-based-lgbm-feature-first-short-router.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-feature-first-short-router.md)
+> - [docs/status/current-state.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/status/current-state.md)
 
 This document is the living documentation for the `content-based/` module. It reflects what is implemented today, how the manual and deep embedding families are built, and what the current report can and cannot prove.
 
@@ -38,11 +40,11 @@ The branch is now beyond the first manual-only prototype:
 - The competition deep-user pipeline is implemented
 - The embedding quality report is implemented as an offline diagnostic
 - A competition-oriented downstream scorer over frozen deep embeddings is implemented
-- A hybrid competition submission path over deep predictions plus a GBM fallback is implemented
+- A competition router over `raw_core` plus archetypes for cold start and prefix-deep features for known users is implemented
 - Two standalone LightGBM competition baselines are implemented:
   - raw tabular features only
   - deep embeddings plus scalar priors
-- A routed LightGBM stack over `raw_core` plus metadata-driven user archetypes is implemented
+- The routed LightGBM stack now has a third branch for known users in the `6-20` band
 
 In checklist terms:
 
@@ -51,6 +53,33 @@ In checklist terms:
 - Phase 4 manual profile: done
 - Phase 4 deep competition embeddings: done
 - Phase 2, Phase 5, and Phase 6: still pending as formal, leak-safe prediction work
+
+Current competition submission path:
+
+- `content-based/artifacts/lgbm_raw_router_prefix_deep_v1/submission.csv`
+
+Current router policy:
+
+- `0 -> cold_model`
+- `6-20 -> known_prefix_deep_model`
+- other known users -> `known_model`
+
+Latest short-history diagnostic and ablation context:
+
+- deep short-band diagnostic:
+  - [`content-based/artifacts/known_user_short_band_diagnostic_v1/report.md`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_short_band_diagnostic_v1/report.md)
+- latest feature-first GPU run:
+  - [`content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/validation_summary.json`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/validation_summary.json)
+- short-history comparison vs deep `v3`:
+  - [`content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/short_history_vs_v3.csv`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/short_history_vs_v3.csv)
+
+Current recommendation after those runs:
+
+- keep [`known_user_deep_router_v2_eval_v3`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_deep_router_v2_eval_v3) as the stable short-history reference
+- keep `lgbm_feature_first_short_router_v1_gpu` as a documented ablation only
+- do not promote the feature-first run to submission, because it improves the global tabular MAE slightly but loses clearly in `2-5` against the deep `v3` snapshot
+
+The previous `lgbm_raw_router_v1` remains the historical baseline for comparison.
 
 See also:
 
@@ -68,21 +97,22 @@ See also:
 
 ## Current Competition Submission Path
 
-The active competition export path is now hybrid:
+The active competition export path is now the routed LightGBM snapshot:
 
-- deep submission: `content-based/artifacts/frozen_embedding_submission_v1/submission.csv`
-- GBM submission: `content-based/artifacts/gbm_submission_v1/submission.csv`
-- final blended submission: `content-based/artifacts/blended_submission_v1/submission.csv`
+- `content-based/artifacts/lgbm_raw_router_prefix_deep_v1/submission.csv`
 
 Prediction rule:
 
-- known train users: average the already rounded deep and GBM stars, then round half-up
-- new users: use the GBM star directly
+- `history_band = 0 -> cold_model`
+- `history_band = 6-20 -> known_prefix_deep_model`
+- other known users -> `known_model`
 
 Current deliverable columns:
 
 - `review_id`
 - `stars`
+
+The older deep + GBM blend remains historical context only.
 
 ## Dataset Used By This Module
 

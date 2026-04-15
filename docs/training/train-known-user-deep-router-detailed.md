@@ -1,6 +1,6 @@
 # `train_known_user_deep_router.py`: documentacion detallada
 
-Fecha de auditoria: `2026-04-11`
+Fecha de auditoria: `2026-04-13`
 
 ## 1. Resumen ejecutivo
 
@@ -23,11 +23,36 @@ La idea clave es esta:
 - anade una cuarta posibilidad efectiva: `known_user_deep_e2e_model`
 - pero solo para usuarios conocidos y solo en las bandas donde demuestre mejora
 
-En el snapshot actual, el entrenamiento existe y el artefacto final se exporto, pero:
+En la version actual del codigo, la rama `known_user_deep_e2e` ya no es una sola cabeza uniforme.
 
-- `enabled_known_deep_bands = []`
-- `known_user_deep_branch_rows = 0`
-- el router final queda igual que el incumbent
+Ahora:
+
+- mantiene un tronco compartido para negocio, eventos e identidad de usuario
+- usa cinco expertos internos por banda efectiva de historial
+- aprende una correccion acotada sobre la prediccion del incumbent
+- sigue exportandose como un unico checkpoint y una unica rama de router
+
+En el codigo actual los expertos internos son:
+
+- `band_1`
+- `band_2_3`
+- `band_4_5`
+- `band_6_20`
+- `band_gt_20`
+
+La logica de router externo no cambia:
+
+- el incumbent sigue produciendo la prediccion base
+- la rama deep solo puede reemplazarla en las bandas habilitadas
+- el reemplazo ocurre fila a fila sobre usuarios conocidos con cobertura deep
+
+Estado ya superado:
+
+- el snapshot historico `known_user_deep_router_v1` no activaba ninguna banda
+- el snapshot `known_user_deep_router_moe_eval_v1` ya activaba `2-5`, `6-20` y `>20`
+- el snapshot corregido `known_user_deep_router_v2_eval_v2` activa `1`, `2-5`, `6-20` y `>20`
+- el mejor snapshot estable actual es `known_user_deep_router_v2_eval_v3`
+- el snapshot `known_user_deep_router_v4_eval_v1` anade split interno `2-3` / `4-5`, pero no supera a `v3`
 
 ## 2. Respuesta corta a tu duda sobre los embeddings `v3`
 
@@ -74,21 +99,81 @@ flowchart TD
     M --> O
     O --> P["history / positive / negative attention"]
     N --> P
-    P --> Q["taste_fusion"]
-    L --> Q
-    M --> Q
+    P --> Q{"band expert dispatch"}
+    K --> Q
+    Q --> Q1["expert band_1"]
+    Q --> Q2["expert band_2_3"]
+    Q --> Q3["expert band_4_5"]
+    Q --> Q4["expert band_6_20"]
+    Q --> Q5["expert band_gt_20"]
     R["baseline_features normalizadas"] --> S["baseline_head bounded"]
-    I --> T["gate_head"]
+    B["business_tower"] --> Q1
+    B --> Q2
+    B --> Q3
+    B --> Q4
+    B --> Q5
+    M --> Q1
+    M --> Q2
+    M --> Q3
+    M --> Q4
+    M --> Q5
+    P --> Q1
+    P --> Q2
+    P --> Q3
+    P --> Q4
+    P --> Q5
+    B2["incumbent_prediction_raw"] --> T
+    I --> T["expert gate head"]
     K --> T
-    Q --> U["residual_head bounded"]
+    Q1 --> U["expert correction head"]
+    Q2 --> U
+    Q3 --> U
+    Q4 --> U
+    Q5 --> U
     T --> V["alpha"]
     S --> W["baseline_hat"]
-    U --> X["residual_hat"]
-    W --> Y["baseline_hat + alpha * residual_hat"]
+    U --> X["correction_hat"]
+    B2 --> Y["incumbent_prediction_raw + alpha * correction_hat"]
     V --> Y
     X --> Y
     Y --> Z["clip to [1,5]"]
 ```
+
+Lectura correcta de esta version:
+
+- `baseline_hat` sigue existiendo como senal interna estable y objetivo auxiliar
+- la prediccion final ya no se construye como `baseline_hat + alpha * residual_hat`
+- la prediccion final se construye como correccion acotada sobre el incumbent
+- el experto activo depende de `history_band_ids`
+
+## 3.1.1 Los expertos internos
+
+La arquitectura deep ya no usa una sola ruta alta para todos los usuarios conocidos.
+
+Usa cinco expertos:
+
+- `band_1`
+  - pensado para usuarios con solo una interaccion previa
+  - ruta mas corta y mas regularizada
+  - menor escala maxima de correccion
+- `band_2_3`
+  - experto corto temprano
+  - mas conservador y mas dependiente de poca evidencia historica
+- `band_4_5`
+  - experto corto maduro
+  - permite una correccion mas flexible que `2-3`
+- `band_6_20`
+  - experto especifico para historiales medios
+  - es una de las zonas donde mejor resultado ha dado la rama deep
+- `band_gt_20`
+  - experto especifico para historiales largos
+  - separa el comportamiento de usuarios maduros de los muy maduros
+
+Esto permite que la rama deep no obligue a una sola funcion a explicar a la vez:
+
+- usuarios con una sola review previa
+- usuarios con poco contexto, distinguiendo `2-3` frente a `4-5`
+- usuarios con historial medio o largo
 
 ## 3.2 Tecnica De Enrutado
 
@@ -131,6 +216,25 @@ O sea:
 - el embedding `v3` del negocio no es el predictor final
 - es la materia prima de la rama deep
 
+## 3.3 Uso explicito del incumbent dentro del modelo deep
+
+La version nueva cambia un punto importante:
+
+- antes la rama deep intentaba producir una prediccion propia relativamente libre
+- ahora recibe `incumbent_prediction_raw` como entrada del dataset preparado
+- y aprende una correccion acotada sobre esa prediccion
+
+La forma logica de salida es:
+
+- `pred = clip(incumbent_prediction_raw + alpha * correction_hat, 1, 5)`
+
+Consecuencias practicas:
+
+- la rama deep deja de competir como modelo completamente independiente
+- pasa a comportarse como un corrector especializado del incumbent
+- si no encuentra evidencia suficiente, el gate `alpha` puede mantener una correccion pequena
+- esto reduce el riesgo de sobrecorrecciones en bandas cortas
+
 ## 4. Estado conceptual del sistema antes de este script
 
 El incumbent que carga `train_known_user_deep_router.py` viene de:
@@ -168,11 +272,69 @@ Y su `validation_summary.json` muestra:
 
 ### 5.2 Artefacto deep router nuevo
 
-Existe el directorio:
+### 5.3 Artefacto `moe_eval_v1`
 
-- [content-based/artifacts/known_user_deep_router_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_deep_router_v1)
+Existe:
 
-La corrida completa si existe.
+- [content-based/artifacts/known_user_deep_router_moe_eval_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_deep_router_moe_eval_v1)
+
+Resultado principal:
+
+- activa `2-5`, `6-20` y `>20`
+- mejora global del router de usuario conocido: `overall_delta = -0.0017359`
+- mejora del deep sobre las filas con cobertura: `delta_mae = -0.0051910`
+
+Limitacion importante detectada durante la auditoria:
+
+- la banda `1` aparecia con mejora en los CSV de prediccion
+- pero el `validation_summary.json` la reportaba con `deep_available_rows = 0`
+- la causa era una inconsistencia en como el incumbent reconstruia `history_band`
+
+### 5.4 Artefacto corregido `v2_eval_v2`
+
+Existe:
+
+- [content-based/artifacts/known_user_deep_router_v2_eval_v2](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_deep_router_v2_eval_v2)
+
+Cambios relevantes respecto a `moe_eval_v1`:
+
+- separacion real de expertos `6-20` y `>20`
+- soporte explicito y activacion de banda `1`
+- fix del bug de consistencia entre el incumbent y el dataset deep para `history_band`
+- rerun completo ejecutado con GPU via `uv`
+
+Resultados finales del snapshot corregido:
+
+- `enabled_known_deep_bands = ["1", "2-5", "6-20", ">20"]`
+- `overall_delta = -0.0022113`
+- `known_delta = -0.0066124`
+- `deep_model_eval.delta_mae = -0.0066124`
+- `known_user_deep_branch_rows = 244828` en submission
+
+Lectura practica:
+
+- `v2_eval_v2` mejora a `moe_eval_v1`
+- la banda `1` deja de estar rota y pasa a ser util
+- la mejor run interna vuelve a ser `run01_base`
+
+### 5.5 Lectura por bandas de `v2_eval_v2/run01_base`
+
+Artefacto:
+
+- [content-based/artifacts/known_user_deep_router_v2_eval_v2/runs/run01_base/validation_summary.json](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_deep_router_v2_eval_v2/runs/run01_base/validation_summary.json)
+
+Resultados `deep_model_eval.band_metrics`:
+
+- banda `1`: `delta_mae = -0.0075672`
+- banda `2-5`: `delta_mae = -0.0025034`
+- banda `6-20`: `delta_mae = -0.0127912`
+- banda `>20`: `delta_mae = -0.0049825`
+
+Interpretacion:
+
+- la mejor ganancia esta en `6-20`
+- la banda `1` mejora de forma real una vez corregido el bug de etiquetado
+- `2-5` sigue siendo la banda mas debil del sistema aunque ya mejora
 
 Lo que hay ahora mismo es:
 
@@ -192,23 +354,54 @@ Eso indica que, en este workspace, la rama `known_user_deep_router_v1` esta:
 - exportada como snapshot candidato
 - no consolidada aun como snapshot oficial de produccion
 
-### 5.3 Resultado del snapshot exportado
+La documentacion de esta seccion debe leerse como fotografia del snapshot historico auditado.
 
-En `known_user_deep_training_summary.json`:
+La implementacion actual del codigo ya incluye:
 
-- `best_run_name = run01_base`
-- los cinco runs tienen `success = false`
-- todos exportan `enabled_bands = []`
+- cinco expertos internos por banda efectiva
+- correccion sobre incumbent
+- metricas de `alpha` y magnitud de correccion por banda en validacion
+- metricas especificas para corto historial:
+  - `2`
+  - `3`
+  - `4`
+  - `5`
+  - `2-3`
+  - `4-5`
 
-En `submission_summary.json`:
+### 5.6 Estado actual tras `v3` y `v4`
 
-- `known_user_deep_branch_rows = 0`
-- `enabled_known_deep_bands = []`
+El mejor snapshot estable actual ya no es `v1` ni `v2_eval_v2`.
 
-Conclusion:
+Ahora la referencia real es:
 
-- el incumbent actual sigue siendo el router `lgbm_raw_router_prefix_deep_v1`
-- la rama `known_user_deep_e2e` no ha demostrado mejora en el snapshot exportado
+- [`known_user_deep_router_v2_eval_v3`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_deep_router_v2_eval_v3)
+  - mejor run: `runA_2_5_gate_looser`
+  - `final_overall_mae = 0.5999163`
+  - `overall_delta = -0.0034977`
+  - mejora especialmente fuerte en `2-5`: `delta_mae = -0.0137899`
+
+Y la tanda `v4` mas reciente queda asi:
+
+- [`known_user_deep_router_v4_eval_v1`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_deep_router_v4_eval_v1)
+  - mejor run: `runB_short_split_capacity`
+  - `final_overall_mae = 0.6008307`
+  - `overall_delta = -0.0025833`
+  - mejora agregada en `2-5`: `delta_mae = -0.0067465`
+  - mejora por subtramos cortos:
+    - `2 = -0.0051231`
+    - `3 = -0.0070968`
+    - `4 = -0.0087934`
+    - `5 = -0.0086428`
+    - `2-3 = -0.0058715`
+    - `4-5 = -0.0087281`
+
+Conclusion operativa:
+
+- `v4` fue util para diagnosticar la heterogeneidad dentro de `2-5`
+- `4-5` responde mejor que `2-3`
+- pero el split interno corto no supera al mejor experto corto unico de `v3`
+- por tanto `known_user_deep_router_v2_eval_v3` sigue siendo el snapshot candidato estable
 
 ## 6. Entradas globales del script
 
@@ -217,6 +410,41 @@ El script consume cuatro bloques principales:
 ### 6.1 Tablas base
 
 Se cargan desde `utils.io`:
+
+### 6.2 Prediccion incumbent alineada por fila
+
+La version nueva del pipeline construye tambien una tabla de prediccion incumbent para:
+
+- `train_split`
+- `val_split`
+- `train_reviews` completo al reentrenar
+- `test_reviews` al exportar submission
+
+Esa tabla aporta al dataset deep:
+
+- `incumbent_prediction_raw`
+- `incumbent_branch`
+
+`incumbent_prediction_raw` entra directamente en el `forward(...)` del modelo profundo.
+
+Su funcion no es solo diagnostica.
+
+Es parte de la semantica del modelo:
+
+- sirve de base para la correccion
+- alimenta el gate del experto
+- se usa en la loss de distilacion
+
+### 6.3 Nuevas metricas de validacion
+
+Ademas de comparar `incumbent_mae` y `deep_mae` por banda, el resumen de validacion ahora puede incluir:
+
+- media y desviacion de `alpha` por banda
+- magnitud media absoluta de la correccion
+- porcentaje de filas donde la correccion mejora al incumbent
+- porcentaje de filas donde la correccion empeora al incumbent
+
+Esto se guarda dentro de `router_replacement_eval`.
 
 - `usuarios.csv`
 - `negocios.csv`
@@ -623,13 +851,14 @@ La query de atencion se forma con:
 - `candidate_business_vec`
 - `user_type_vec`
 
-### 12.5 Descomposicion baseline + residual
+### 12.5 Descomposicion baseline + corrector sobre incumbent
 
-La prediccion final no es monolitica.
+La red mantiene una descomposicion interna, pero la salida final ya no es una prediccion libre.
+
 Se separa en:
 
 - `baseline_hat`
-- `residual_hat`
+- `correction_hat`
 
 Y una puerta:
 
@@ -637,12 +866,13 @@ Y una puerta:
 
 Prediccion final:
 
-- `predicted_rating = clamp(baseline_hat + alpha * residual_hat, 1, 5)`
+- `predicted_rating = clamp(incumbent_prediction_raw + alpha * correction_hat, 1, 5)`
 
 Esto significa:
 
-- la red aprende una base tabular estable
-- y luego corrige con una componente dependiente del gusto secuencial del usuario
+- `baseline_hat` sigue siendo una senal auxiliar estable
+- la prediccion servida se comporta como un corrector especializado del incumbent
+- el componente secuencial del usuario entra sobre todo a traves de `correction_hat` y del gate
 
 ### 12.6 Cambio importante en la version actual del codigo
 
@@ -658,12 +888,12 @@ Ahora:
 Y ademas:
 
 - `baseline_hat = global_mean + 2.0 * tanh(baseline_raw)`
-- `residual_hat = 1.5 * tanh(residual_raw)`
+- `correction_hat = correction_scale * tanh(correction_raw)`
 
 Objetivo de este cambio:
 
 - evitar que `baseline_hat` explote a cientos
-- evitar el colapso de la salida a `5.0`
+- acotar la correccion para reducir sobrecorrecciones
 - hacer comparables runs con hiperparametros distintos
 
 ## 13. Funcion de perdida
@@ -809,9 +1039,10 @@ En el estado actual del repo:
 - `known_prefix_deep_model`
   - entrenado y activo para `6-20` dentro del mismo incumbent
 - `known_user_deep_e2e_model`
-  - implementado y entrenado en `known_user_deep_router_v1`
-  - no consolidado aun como router final oficial
-  - el snapshot exportado no activa ninguna banda
+  - implementado y ya validado como corrector util sobre el incumbent
+  - tiene snapshot estable en `known_user_deep_router_v2_eval_v3`
+  - tiene snapshot diagnostico en `known_user_deep_router_v4_eval_v1`
+  - sigue sin ser el router oficial base, pero ya no es una rama sin activacion
 
 ## 20. Respuesta final, en lenguaje directo
 
@@ -830,4 +1061,4 @@ Dicho de otra forma:
 - son del subsistema deep
 - el script los necesita porque esta intentando meter una nueva rama deep en el router
 
-Si quieres, el siguiente paso util que puedo hacer es auditar la nueva corrida despues de la correccion de normalizacion y salida acotada para ver si por fin aparece alguna banda competitiva.
+Si quieres, el siguiente paso util que puedo hacer es proponerte una `v5` centrada solo en `2-3` o, alternativamente, abrir una linea separada para `history_band = 0`.

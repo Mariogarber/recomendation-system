@@ -221,17 +221,42 @@ class BusinessRepresentationBuilder:
         business_priors: pd.DataFrame,
     ) -> pd.DataFrame:
         prepared = businesses.merge(business_priors, on="business_id", how="left")
-        prepared["state_clean"] = prepared.get("state", pd.Series(index=prepared.index)).apply(_normalize_token)
-        prepared["city_clean"] = prepared.get("city", pd.Series(index=prepared.index)).apply(_normalize_token)
+        state_raw = prepared.get("state", pd.Series(index=prepared.index, dtype="object"))
+        city_raw = prepared.get("city", pd.Series(index=prepared.index, dtype="object"))
+        latitude_raw = pd.to_numeric(
+            prepared.get("latitude", pd.Series(index=prepared.index, dtype="float64")),
+            errors="coerce",
+        )
+        longitude_raw = pd.to_numeric(
+            prepared.get("longitude", pd.Series(index=prepared.index, dtype="float64")),
+            errors="coerce",
+        )
+
+        prepared["state_present_raw"] = state_raw.notna()
+        prepared["city_present_raw"] = city_raw.notna()
+        prepared["latitude_present_raw"] = latitude_raw.notna()
+        prepared["longitude_present_raw"] = longitude_raw.notna()
+
+        prepared["state_clean"] = state_raw.apply(_normalize_token)
+        prepared["city_clean"] = city_raw.apply(_normalize_token)
         prepared["state_clean"] = prepared["state_clean"].replace("", "__unknown__").fillna("__unknown__")
         prepared["city_clean"] = prepared["city_clean"].replace("", "__unknown__").fillna("__unknown__")
 
-        prepared["latitude_filled"] = pd.to_numeric(prepared.get("latitude"), errors="coerce")
-        prepared["longitude_filled"] = pd.to_numeric(prepared.get("longitude"), errors="coerce")
-        prepared["latitude_filled"] = prepared["latitude_filled"].fillna(prepared["latitude_filled"].median())
-        prepared["longitude_filled"] = prepared["longitude_filled"].fillna(prepared["longitude_filled"].median())
+        prepared["latitude_filled"] = latitude_raw
+        prepared["longitude_filled"] = longitude_raw
+        latitude_fill_value = float(prepared["latitude_filled"].median(skipna=True))
+        longitude_fill_value = float(prepared["longitude_filled"].median(skipna=True))
+        if not np.isfinite(latitude_fill_value):
+            latitude_fill_value = 0.0
+        if not np.isfinite(longitude_fill_value):
+            longitude_fill_value = 0.0
+        prepared["latitude_filled"] = prepared["latitude_filled"].fillna(latitude_fill_value)
+        prepared["longitude_filled"] = prepared["longitude_filled"].fillna(longitude_fill_value)
 
-        prepared["is_open_clean"] = pd.to_numeric(prepared.get("is_open"), errors="coerce").fillna(0.0).astype(float)
+        prepared["is_open_clean"] = pd.to_numeric(
+            prepared.get("is_open", pd.Series(index=prepared.index, dtype="float64")),
+            errors="coerce",
+        ).fillna(0.0).astype(float)
 
         prepared["parsed_categories"] = prepared.get("categories", pd.Series(index=prepared.index)).apply(parse_categories)
         prepared["parsed_attributes"] = prepared.get("attributes", pd.Series(index=prepared.index)).apply(parse_attributes)
@@ -318,13 +343,24 @@ class BusinessRepresentationBuilder:
             feature_names.extend(cluster_dummies.columns.tolist())
 
         matrix = sparse.hstack(matrices, format="csr").astype(np.float32)
+        geo_raw_coverage = float(
+            prepared[
+                [
+                    "state_present_raw",
+                    "city_present_raw",
+                    "latitude_present_raw",
+                    "longitude_present_raw",
+                ]
+            ].all(axis=1).mean()
+        ) if n_rows else 0.0
+        geo_filled_coverage = float(
+            prepared[["state_clean", "city_clean", "latitude_filled", "longitude_filled"]].notna().all(axis=1).mean()
+        ) if n_rows else 0.0
         return {
             "block_name": "geo",
             "matrix": matrix,
             "feature_names": feature_names,
-            "coverage": float(
-                prepared[["state_clean", "city_clean", "latitude_filled", "longitude_filled"]].notna().all(axis=1).mean()
-            ),
+            "coverage": geo_raw_coverage,
             "pruning_rule": f"city_min_freq>={self.config.min_city_freq}; city_strategy={city_strategy}",
             "source": "business_metadata",
             "requires_audit": False,
@@ -332,6 +368,8 @@ class BusinessRepresentationBuilder:
             "extra": {
                 "city_strategy": city_strategy,
                 "kept_city_count": int(len(kept_cities)),
+                "raw_coverage": geo_raw_coverage,
+                "filled_coverage": geo_filled_coverage,
             },
         }
 
@@ -562,6 +600,10 @@ class BusinessRepresentationBuilder:
         table = pd.DataFrame(
             {
                 "business_id": prepared["business_id"],
+                "state_present_raw": prepared["state_present_raw"],
+                "city_present_raw": prepared["city_present_raw"],
+                "latitude_present_raw": prepared["latitude_present_raw"],
+                "longitude_present_raw": prepared["longitude_present_raw"],
                 "state_clean": prepared["state_clean"],
                 "city_clean": prepared["city_clean"],
                 "city_bucket": prepared["city_bucket"],

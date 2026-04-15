@@ -363,6 +363,10 @@ class UserRepresentationBuilder:
         profile_feature_names: list[str],
         metadata_feature_names: list[str],
     ) -> pd.DataFrame:
+        business_source = _describe_business_view_source(
+            self.config.business_view,
+            self.config.business_blocks,
+        )
         rows: list[dict[str, Any]] = []
         feature_index = 0
         for feature_name in profile_feature_names:
@@ -371,9 +375,14 @@ class UserRepresentationBuilder:
                     "feature_index": feature_index,
                     "feature_name": feature_name,
                     "block_name": "profile",
-                    "source": "train_reviews + business_representation.content",
+                    "source": business_source,
+                    "business_view": self.config.business_view,
+                    "business_blocks": ",".join(self.config.business_blocks) if self.config.business_blocks else "",
                     "requires_audit": False,
-                    "default_rule": "computed from weighted aggregation of rated business vectors",
+                    "default_rule": (
+                        f"computed from {self.config.aggregation_mode} aggregation of "
+                        f"rated business_representation.{self.config.business_view} vectors"
+                    ),
                 }
             )
             feature_index += 1
@@ -385,6 +394,8 @@ class UserRepresentationBuilder:
                     "feature_name": feature_name,
                     "block_name": "metadata",
                     "source": "user_metadata_safe_direct",
+                    "business_view": "",
+                    "business_blocks": "",
                     "requires_audit": False,
                     "default_rule": "missing metadata->filled and normalized",
                 }
@@ -407,6 +418,11 @@ class UserRepresentationBuilder:
                 "user_mean_rating": user_stats["user_mean_rating"].to_numpy(dtype=np.float32),
                 "history_band": user_stats["history_band"].astype(str).to_numpy(),
                 "aggregation_mode": self.config.aggregation_mode,
+                "business_view": self.config.business_view,
+                "profile_source": _describe_business_view_source(
+                    self.config.business_view,
+                    self.config.business_blocks,
+                ),
                 "fallback_single_review_count_global": fallback_summary["fallback_single_review_count"],
                 "fallback_zero_abs_count_global": fallback_summary["fallback_zero_abs_count"],
             }
@@ -438,6 +454,10 @@ class UserRepresentationBuilder:
             "business_view": self.config.business_view,
             "business_blocks": self.config.business_blocks,
             "include_metadata": bool(self.config.include_metadata),
+            "profile_source": _describe_business_view_source(
+                self.config.business_view,
+                self.config.business_blocks,
+            ),
             "profile_feature_count": int(len(business_feature_names)),
             "metadata_feature_count": int(len(metadata_feature_names)),
             "fallback_summary": fallback_summary,
@@ -509,6 +529,29 @@ def _safe_zscore(values: np.ndarray) -> np.ndarray:
     return ((array - mean) / std).astype(np.float32)
 
 
+def _fit_aware_zscore(values: np.ndarray, fit_mask: np.ndarray | None) -> np.ndarray:
+    array = np.asarray(values, dtype=np.float32)
+    if fit_mask is None or len(fit_mask) != len(array):
+        return _safe_zscore(array)
+
+    reference = array[np.asarray(fit_mask, dtype=bool)]
+    if len(reference) == 0:
+        return _safe_zscore(array)
+
+    mean = float(reference.mean())
+    std = float(reference.std())
+    if std == 0.0:
+        return np.zeros_like(array, dtype=np.float32)
+    return ((array - mean) / std).astype(np.float32)
+
+
+def _describe_business_view_source(business_view: str, business_blocks: list[str] | None) -> str:
+    source = f"train_reviews + business_representation.{business_view}"
+    if business_blocks:
+        source = f"{source}[blocks={','.join(business_blocks)}]"
+    return source
+
+
 def _save_clean_table(df: pd.DataFrame, filepath_without_suffix: Path) -> Path:
     parquet_path = filepath_without_suffix.with_suffix(".parquet")
     try:
@@ -539,11 +582,26 @@ def build_safe_user_metadata_block(
         keep_columns = [column for column in keep_columns if column in user_metadata.columns]
         metadata = metadata.merge(user_metadata[keep_columns], on="user_id", how="left")
 
+    train_user_ids = set(canonicalize_reviews(train_reviews)["user"].dropna().astype(str))
+    fit_mask = metadata["user_id"].astype(str).isin(train_user_ids).to_numpy()
+    if not fit_mask.any():
+        fit_mask = np.ones(len(metadata), dtype=bool)
+
     train_end = pd.to_datetime(train_reviews["date"], errors="coerce").max()
-    yelping_since = pd.to_datetime(metadata.get("yelping_since"), errors="coerce")
+    yelping_since = pd.to_datetime(
+        metadata.get("yelping_since", pd.Series(index=metadata.index, dtype="datetime64[ns]")),
+        errors="coerce",
+    )
     tenure_days = (train_end - yelping_since).dt.total_seconds() / 86400.0
-    nanmedian_tenure = float(np.nanmedian(tenure_days)) if len(metadata) else 0.0
-    metadata["metadata__tenure_days"] = tenure_days.fillna(nanmedian_tenure if np.isfinite(nanmedian_tenure) else 0.0)
+    reference_tenure = tenure_days.to_numpy(dtype=np.float64)[fit_mask]
+    reference_tenure = reference_tenure[np.isfinite(reference_tenure)]
+    if len(reference_tenure):
+        tenure_fill_value = float(np.nanmedian(reference_tenure))
+    else:
+        tenure_fill_value = float(np.nanmedian(tenure_days)) if len(metadata) else 0.0
+    if not np.isfinite(tenure_fill_value):
+        tenure_fill_value = 0.0
+    metadata["metadata__tenure_days"] = tenure_days.fillna(tenure_fill_value)
     metadata["metadata__elite_years_count"] = metadata.get("elite", pd.Series(index=metadata.index)).apply(_parse_elite_years_count)
     metadata["metadata__elite_any"] = (metadata["metadata__elite_years_count"] > 0).astype(np.float32)
 
@@ -551,21 +609,27 @@ def build_safe_user_metadata_block(
     for column in ["useful", "funny", "cool", "fans"]:
         if column in metadata.columns:
             transformed = np.log1p(pd.to_numeric(metadata[column], errors="coerce").fillna(0.0).to_numpy(dtype=np.float32))
-            normalized = _safe_zscore(transformed)
+            normalized = _fit_aware_zscore(transformed, fit_mask)
             feature_name = f"metadata__{column}_log1p_z"
             metadata[feature_name] = normalized
             numeric_base.append(feature_name)
 
     compliment_columns = [column for column in metadata.columns if column.startswith("compliment_")]
     metadata_feature_names = ["metadata__tenure_days_z", "metadata__elite_years_count_z", "metadata__elite_any"]
-    metadata["metadata__tenure_days_z"] = _safe_zscore(metadata["metadata__tenure_days"].to_numpy(dtype=np.float32))
-    metadata["metadata__elite_years_count_z"] = _safe_zscore(metadata["metadata__elite_years_count"].to_numpy(dtype=np.float32))
+    metadata["metadata__tenure_days_z"] = _fit_aware_zscore(
+        metadata["metadata__tenure_days"].to_numpy(dtype=np.float32),
+        fit_mask,
+    )
+    metadata["metadata__elite_years_count_z"] = _fit_aware_zscore(
+        metadata["metadata__elite_years_count"].to_numpy(dtype=np.float32),
+        fit_mask,
+    )
     metadata_feature_names.extend(numeric_base)
 
     for column in compliment_columns:
         transformed = np.log1p(pd.to_numeric(metadata[column], errors="coerce").fillna(0.0).to_numpy(dtype=np.float32))
         feature_name = f"metadata__{column}_log1p_z"
-        metadata[feature_name] = _safe_zscore(transformed)
+        metadata[feature_name] = _fit_aware_zscore(transformed, fit_mask)
         metadata_feature_names.append(feature_name)
 
     matrix_values = metadata[metadata_feature_names].fillna(0.0).to_numpy(dtype=np.float32)
@@ -573,7 +637,9 @@ def build_safe_user_metadata_block(
     clean_table = metadata[[
         "user_id",
         "metadata__tenure_days",
+        "metadata__tenure_days_z",
         "metadata__elite_years_count",
+        "metadata__elite_years_count_z",
         "metadata__elite_any",
         *numeric_base,
         *[name for name in metadata_feature_names if name.startswith("metadata__compliment_")],

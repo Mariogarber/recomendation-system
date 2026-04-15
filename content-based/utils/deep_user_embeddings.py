@@ -39,6 +39,8 @@ class DeepUserEmbeddingConfig:
     metadata_hidden_layers: tuple[int, ...] = (128, 64)
     scorer_hidden_layers: tuple[int, ...] = (256, 128)
     dropout: float = 0.15
+    history_shrinkage_temperature: float = 3.0
+    rating_modulation_scale: float = 0.35
     batch_size: int = 768
     learning_rate: float = 8e-4
     weight_decay: float = 2e-5
@@ -290,14 +292,18 @@ class DeepUserEmbeddingBuilder:
             {
                 "feature_index": np.arange(len(user_feature_names), dtype=int),
                 "feature_name": user_feature_names,
+                "block_name": "user_embedding",
                 "source": "deep_user_encoder",
+                "default_rule": "learned from temporal prefix supervision",
             }
         )
         business_feature_metadata = pd.DataFrame(
             {
                 "feature_index": np.arange(len(business_feature_names), dtype=int),
                 "feature_name": business_feature_names,
+                "block_name": "business_embedding",
                 "source": "business_tower",
+                "default_rule": "learned jointly with user encoder",
             }
         )
 
@@ -315,6 +321,10 @@ class DeepUserEmbeddingBuilder:
             "business_blocks": self.config.business_blocks,
             "architecture_field_names": architecture_field_names,
             "architecture_kwargs": _jsonable_value(architecture_kwargs),
+            "user_feature_source": "deep_user_encoder",
+            "business_feature_source": f"business_representation.{self.config.business_view}",
+            "temporal_validation_protocol": "temporal_train_validation_split",
+            "export_history_source": "full_train_history_prefixes",
             "model_parameter_count": model_parameter_count,
             "trainable_parameter_count": trainable_parameter_count,
             "n_train_samples": int(len(train_arrays["candidate_item_idx"])),

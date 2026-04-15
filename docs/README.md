@@ -35,6 +35,7 @@ Los `README.md` del repositorio y de cada modulo son hubs de entrada cortos. La 
 - [Deep User De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-deep-user.md)
 - [Frozen Regressor De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-frozen-regressor.md)
 - [LGBM Raw Router De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-router.md)
+- [Two-Tower Router De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-known-user-two-tower-router.md)
 
 ## Referencia
 
@@ -52,6 +53,7 @@ Los `README.md` del repositorio y de cada modulo son hubs de entrada cortos. La 
 - [Registro Oficial De Runs Y Snapshots](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/registry.md)
 - [Log Deep User De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/content-based-deep-user-log.md)
 - [Raw Router Prefix Deep 2026-04-11](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/raw-router-prefix-deep-2026-04-11.md)
+- [Two-Tower Router 2026-04-12](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/two-tower-router-2026-04-12.md)
 
 ## Propuestas
 
