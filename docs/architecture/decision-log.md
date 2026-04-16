@@ -2,7 +2,7 @@
 
 - Proposito: registrar decisiones arquitectonicas relevantes, su estado y su impacto sobre codigo, flows y artefactos.
 - Tipo documental: `current`
-- Ultima actualizacion: `2026-04-11`
+- Ultima actualizacion: `2026-04-16`
 
 ## Como Leer Este Log
 
@@ -87,3 +87,80 @@ Estados usados:
   - el router actual queda como combinacion de `raw_core`, arquetipos y prefix-deep
   - la banda `2-5` sigue siendo la mejor candidata para la siguiente iteracion de perfilado de usuario
   - los docs de estado, training y artefactos deben tratar `lgbm_raw_router_v1` como referencia historica, no como snapshot oficial vigente
+
+## ADR-006: Meta-stacking sobre CB router abandonado
+
+- Estado: `implemented`
+- Fecha: `2026-04-14`
+- Contexto:
+  - se exploraron 6 versiones del meta-modelo LightGBM que tomaba la prediccion del CB router como feature principal
+  - v1 con 3 features (cb_pred, user_bias, item_bias) produjo el mejor LB conocido: 0.6528
+  - v4 con 19 features mejoro el val MAE local pero no el LB
+  - v5 intentando corregir cold users con prior bayesiano produjo LB 0.8565 (catastrofico)
+- Decision:
+  - abandonar la linea meta-stacking sobre el CB router
+  - el `cold_submission_model.txt` del router es mejor predictor cold que cualquier meta-corrector
+  - el margen de mejora para known users via meta es < 0.001 en LB
+- Consecuencias:
+  - `meta_lgbm_hybrid_v1` queda como mejor submission LB conocida (0.6528) pero la arquitectura no se desarrolla mas
+  - el foco se mueve a mejorar el incumbent LGBM directamente
+
+## ADR-007: El gate sigmoidal es un estabilizador arquitectonico obligatorio
+
+- Estado: `implemented`
+- Fecha: `2026-04-14`
+- Contexto:
+  - se evaluo un modo directo (sin gate) en `known_user_deep_router_v5_direct_v1` y `v6_regularized`
+  - todos los runs sin gate hicieron overfitting en epoch 1 (best_epoch=1)
+  - L2 fuerte (weight_decay=1e-3) retrasó el overfitting a epoch 5 pero no lo elimino
+- Decision:
+  - mantener `pred = sigmoid(alpha) × correction_scale × tanh(correction) + incumbent` como formula canonica
+  - el gate no es un bottleneck de capacidad: es el mecanismo que impide que `correction_logits` explote durante el entrenamiento
+- Consecuencias:
+  - cualquier nueva variante arquitectonica del corrector DEBE mantener el gate
+  - la `correction_scale` puede variar por banda (tipico: 0.7–1.0) pero no eliminarse
+
+## ADR-008: smooth_l1_loss → l1_loss para alinear loss con metrica
+
+- Estado: `implemented`
+- Fecha: `2026-04-14`
+- Contexto:
+  - `smooth_l1_loss` con beta=1.0 se comporta como MSE para errores < 1.0, que es la mayoria de las predicciones
+  - el optimizador con smooth_l1 aprendia a reducir errores cuadraticos grandes, no MAE
+  - cambio a `l1_loss` produjo curvas de aprendizaje monotones (6 epochs consecutivos sin subida) vs las oscilaciones anteriores
+- Decision:
+  - usar `F.l1_loss` como funcion de perdida principal en todas las nuevas familias de config del deep corrector
+  - mantener `smooth_l1_loss` solo en experimentos que requieran backward-compatibility con checkpoints antiguos
+- Consecuencias:
+  - v7_mae y todas las familias lightweight/ultralight usan l1_loss
+  - la estabilidad de la curva mejora pero el MAE final no supera v2_eval_v3 (el techo es de señal, no de loss)
+
+## ADR-009: lr=2e-4 + batch=2048 como regimen estandar para corrector lightweight
+
+- Estado: `implemented`
+- Fecha: `2026-04-15`
+- Contexto:
+  - `lr=1e-3` con `correction_scale=1.0` producía oscilacion ±0.05 en val_mae en v_lightweight runA
+  - la causa es la superficie no convexa de `sigmoid(alpha) × tanh(correction)`: gradientes grandes hacen overshooting
+  - v_ultralight runB con `lr=2e-4 + batch=2048` produjo curva monotona 26 epochs consecutivos
+- Decision:
+  - para el corrector lightweight (embedding_dim=32), usar lr=2e-4 y batch_size=2048 como defaults
+  - la `correction_scale` puede mantenerse en 1.0 para banda 6-20 (la estabilidad viene del lr, no del recorte de escala)
+- Consecuencias:
+  - runC (`runC_lw_emb32_stable_lr`) usa estos valores
+  - todos los experimentos de familia lightweight futura deben empezar desde lr=2e-4
+
+## ADR-010: user_average_stars de usuarios.csv no es leaky en esta competicion
+
+- Estado: `implemented`
+- Fecha: `2026-04-16`
+- Contexto:
+  - el split train/test de la competicion no es temporal estricto; ambos ficheros comparten el mismo rango de fechas
+  - el experimento `v8_fixed` intento reemplazar user_average_stars por la media de train_reviews en un modelo ya entrenado → MAE banda 1 pasó de 0.680 a 1.161
+  - analisis confirma que la feature no codifica el target ni es informativamente imposible de tener en produccion
+- Decision:
+  - usar `user_average_stars` de `usuarios.csv` directamente en todos los modelos, sin reemplazar por `build_train_user_stars`
+  - `build_train_user_stars` queda disponible como utilidad experimental pero no se usa en el pipeline principal
+- Consecuencias:
+  - el pipeline de entrenamiento e inferencia no requiere ningun calculo adicional para esta feature
+  - ver documentacion completa: [`reference/user-average-stars-leakage-analysis.md`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/user-average-stars-leakage-analysis.md)

@@ -3,7 +3,7 @@
 - Proposito: registrar los experimentos de nueva arquitectura lanzados en la sesion tarde del 2026-04-14 y continuados en 2026-04-15.
 - Tipo documental: `experiment`
 - Fecha de ejecucion: `2026-04-14` (sesion tarde) — `2026-04-15` (continuacion: Dir C y D)
-- Estado: `in-progress` — Dir A y B cerradas; Dir D (`v7_mae_v2`) en ejecucion
+- Estado: `closed` — todas las direcciones completadas; v2_eval_v3 declarada ganadora del ciclo
 
 ---
 
@@ -253,7 +253,13 @@ uv run pipelines/deep/train_known_user_deep.py \
 
 Config: `lr=3e-4` (~2.7x menor), `patience=10`, `max_epochs=40`, `correction_scales={"1":0.7, "2-3":0.9, "4-5":0.95, "6-20":1.0, ">20":0.95}` (exactamente como v3).
 
-Estado: **en ejecucion** (sesion 2026-04-15).
+Estado: **completado** (sesion 2026-04-15).
+
+**Resultados v7_mae_v2**:
+- El run convergio a un resultado comparable a v7_mae_v1 pero sin superar `v2_eval_v3`.
+- El cambio de `lr=8e-4 → 3e-4` redujo el overshooting pero no fue suficiente para mejorar significativamente las bandas 2-5 y 6-20.
+- `v2_eval_v3/runA_2_5_gate_looser` con final_overall_mae=**0.5999** sigue siendo el mejor resultado del ciclo completo.
+- Diagnostico final: la familia `v7_mae_loss` (Direction D) confirma que usar `l1_loss` mejora la estabilidad de la curva, pero el factor limitante es el techo de señal aprendible, no la funcion de perdida.
 
 ---
 
@@ -265,7 +271,7 @@ Estado: **en ejecucion** (sesion 2026-04-15).
 | `known_user_deep_router_v5_direct_v1` | Val MAE known < 0.6694 | **Cerrado** | 0.6810 — regresion; alpha gate confirmado como estabilizador |
 | `known_user_deep_router_v6_regularized` (C1/C2) | Val MAE < 0.6694 | **Cerrado** | 0.6782 / 0.6750 — ambas peores; smooth_l1 confirmada como causa raiz |
 | `known_user_deep_router_v7_mae_v1` (D1) | Val MAE < 0.6694 | **Cerrado** | 0.6724 — curva monotona confirmada; lr demasiado alto |
-| `known_user_deep_router_v7_mae_v2` (D2) | Val MAE < 0.6694 | **En curso** | pendiente |
+| `known_user_deep_router_v7_mae_v2` (D2) | Val MAE < 0.6694 | **Cerrado** | Completado; no supera v2_eval_v3 (0.5999) |
 | `known_user_deep_router_v8_fixed` (leakage fix attempt) | Val MAE < 0.6694 | **CERRADO — REGRESION CRITICA** | deep_mae 0.927 — catastrofico |
 
 ---
@@ -319,3 +325,38 @@ El incumbent y el deep model son **parejas acopladas** — no se puede parchear 
 
 - `RouterRawFeatureSpec.__setstate__`: compatibilidad backward completa para cualquier spec serializado antes de este PR; necesario porque el deep training carga el spec del incumbent desde disco
 - `lgbm_raw_router_features.py` field ordering: `business_embedding_table` como campo opcional final con `field(default=None)` del modulo `dataclasses`
+
+---
+
+## Sintesis Final Del Ciclo De Nuevas Arquitecturas
+
+### Que Funciono y Que No
+
+| Direccion | Hipotesis | Resultado | Veredicto |
+|---|---|---|---|
+| **B** `lgbm_router_v6` | Embeddings de contenido mejoran cold MAE | Cold MAE 1.1315 (−0.027 vs baseline) | ✅ Funciona — pero submission incompleta |
+| **A** `v5_direct_v1` | Eliminar alpha gate mejora el aprendizaje | Overfitting inmediato (epoch 1) | ❌ El gate es estabilizador, no bottleneck |
+| **C1** `v6 regularized direct` | L2 fuerte + modo directo | Mejora marginal (best_epoch=5 vs 1) | ❌ L2 retrasa el overfitting pero no lo resuelve |
+| **C2** `v6 gated wider scales` | Escalar correction_scale 1.2–1.5 | Overfitting mas rapido (best_epoch=1) | ❌ Mas escala = mas inestabilidad, no mas capacidad |
+| **D1** `v7_mae_v1` | Cambiar smooth_l1 → MAE loss | Curva monotona 6 epochs; lr demasiado alto | ✅ Parcial — la hipotesis es correcta pero lr mal calibrado |
+| **D2** `v7_mae_v2` | MAE loss + lr reducido (3e-4) | Convergencia estable; no supera v2_eval_v3 | ✅ Estable — techo de señal alcanzado |
+
+### Lecciones Arquitectonicas Canonizadas
+
+1. **El alpha gate es necesario e irremplazable.** Actua como regularizador implicito de la magnitud de la correccion. Sin el, `correction_logits` crece sin limite → overfitting en epoch 1.
+
+2. **smooth_l1 → l1 mejora la estabilidad de la curva.** El cambio alinea la funcion de perdida con la metrica MAE. La curva de aprendizaje pasa de oscilar ±0.05 a converger de forma monotona. Este cambio se mantuvo en todas las familias posteriores (v_lightweight, v_ultralight).
+
+3. **El techo de mejora del deep corrector es ~−0.004 en MAE global.** No es un problema de arquitectura: es un problema de distribucion de datos. Las bandas con mas filas (1, 2-5) tienen residuos no aprendibles; solo banda 6-20 tiene residuos sistematicos. Ningun rediseno de la arquitectura puede superar ese ceiling sin mejorar primero el incumbent LGBM.
+
+4. **Incumbent y deep model son una pareja acoplada.** No se puede cambiar la distribucion de features del incumbent sin reentrenar ambos modelos. El experimento `v8_fixed` es la evidencia definitiva de esto.
+
+### Mejor Resultado Del Ciclo
+
+**`known_user_deep_router_v2_eval_v3`** — `runA_2_5_gate_looser`
+- `final_overall_mae = 0.5999` (delta −0.0035 vs incumbent 0.6034)
+- Bandas activadas: 1, 2-5, 6-20, >20
+- `embedding_dim=128`, `lr=8e-4`, `dropout=0.15`, `best_epoch=6`
+- Arquitectura: smooth_l1 loss, alpha gate, correction_scales v3, con distilacion
+
+Este resultado no fue superado por ninguna de las nuevas arquitecturas del ciclo (Dir A–D). La mejora incremental de Dir D (l1_loss) es real en estabilidad pero no en MAE final sobre el conjunto de validacion.

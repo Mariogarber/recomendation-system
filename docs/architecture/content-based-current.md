@@ -2,7 +2,8 @@
 
 - Proposito: describir la arquitectura realmente implementada hoy en la rama `content-based`.
 - Tipo documental: `current`
-- Ultima actualizacion: `2026-04-13`
+- Ultima actualizacion: `2026-04-16`
+- Ver catalogo completo: [`architecture/all-architectures.md`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/architecture/all-architectures.md)
 
 ## Resumen
 
@@ -13,9 +14,11 @@ La rama `content-based` tiene hoy seis capas reales:
    - manual
    - deep
 3. export de embeddings deep y diagnostico downstream
-4. router LightGBM competitivo con ramas para cold start, known users largos y known users prefix-deep
-5. router known-user deep como linea experimental fuerte
-6. router `two tower + cross + prefix memory` como linea experimental evaluada
+4. router LightGBM competitivo con ramas para cold start, known users largos y known users prefix-deep (**ARCH-04** — arquitectura official)
+5. router known-user deep como linea experimental fuerte (**ARCH-07** — mejor MAE de validacion: 0.5999)
+6. router `two tower + cross + prefix memory` como linea experimental evaluada y cerrada (**ARCH-08** — deprecated)
+
+Se han evaluado en total 9 arquitecturas distintas. Ver catalogo completo en [`architecture/all-architectures.md`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/architecture/all-architectures.md).
 
 ## 1. Representacion De Negocio
 

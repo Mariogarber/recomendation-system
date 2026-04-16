@@ -147,3 +147,28 @@ En lugar de continuar con meta-stacking, el trabajo se pivoto a mejorar el cold 
 | v4 (19 features) | 0.6640 | 0.6529 | `candidate` — mejor val |
 | v5 (joint all-bands) | 0.914 | 0.8565 | `deprecated` — catastrofico |
 | v6 (dos modelos) | 0.665/1.017 | — | `deprecated` |
+
+---
+
+## Post-Pivot — Evolucion Del LGBM Router (Posterior A Esta Sesion)
+
+Tras cerrar el ciclo meta-stacking y pivotar al incumbent LGBM directo, se ejecutaron las siguientes iteraciones del router en sesiones posteriores. Los resultados clave se documentan aqui para dar contexto completo sobre la evolucion de la linea LGBM:
+
+### lgbm_router_v9_cold_signals y v10_cf_archetype — CF Features No Ayudan
+
+La hipotesis tras `v8_fixed` (que fallo por leakage, ver `new-architecture-dir-a-b-2026-04-14.md`) fue: si se reentrenan incumbente y deep model con `user_average_stars` honesto (calculado solo desde `train_reviews`), la pareja acoplada deberia mejorar. Como paso previo, se exploraron features CF para el LGBM:
+
+- **v9 `lgbm_router_v9_cold_signals`**: anadio 108 features al cold model (incluyendo CF item bias y senales de amigos del usuario). Val MAE rounded = **0.6557** — peor que el incumbent sin CF (0.6265).
+- **v10 `lgbm_router_v10_cf_archetype`**: añadio archetype distance features (distancia del usuario a cada centroide K-means). Val MAE rounded = **0.6557** — identico a v9. Las features CF de item bias y arquetipo no aportaron nada.
+
+**Diagnostico:** Los features CF de item bias son senales de colaborativo-puro (SVD). Para el LGBM router, estas senales son redundantes porque:
+1. El model ya tiene `business_train_mean` y `business_train_bias` calculados desde train — esencialmente la misma senal que el item bias CF pero computada directamente.
+2. El archetype distance feature captura similitud de perfil de usuario con centroides, pero los arquetipos ya estaban en el modelo como features categoricas (archetype_id). La distancia no aporta informacion nueva.
+
+**Conclusion:** La mejora del incumbent LGBM vino por otra via — las features de prefijo de historial corto (`known_prefix` features). El artefacto `lgbm_feature_first_short_router_v2_gpu_conservative` (val MAE=**0.6247**) es el mejor LGBM puro conocido, usando 625 features que incluyen los prefijos de historial.
+
+### Lecciones Del Post-Pivot
+
+1. **CF item bias es redundante con priors de train.** El LGBM ya captura la senal de popularidad de negocio a traves de `business_train_mean`. Anadir SVD item bias encima no aporta ganancia y puede introducir ruido si el SVD tiene errores de rango.
+2. **El historial corto de usuario es la senal mas valiosa no explotada.** Los 545 features de prefijo (known_prefix_features) permiten al modelo capturar la distribucion individual de ratings del usuario con pocos reviews — informacion que ningun feature agregado puede replicar.
+3. **Las features CF son utiles en el nivel meta (meta_lgbm_hybrid_v1/v4) pero no en el nivel de router directo.** La razon es que en el meta se combinan predicciones ya calibradas (cb_pred como ancla); en el router directo, anadir mas features al LightGBM no mejora si ya hay redundancia con las features existentes.

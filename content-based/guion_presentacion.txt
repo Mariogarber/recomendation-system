@@ -1,0 +1,162 @@
+GUIÓN PRESENTACIÓN — SISTEMA DE RECOMENDACIÓN YELP
+10-12 min, 2 personas
+PA = Persona A (análisis + baselines) | PB = Persona B (arquitectura profunda + resultados)
+================================================================================
+
+
+DIAPOSITIVA 1 — TÍTULO (30 seg — PA)
+--------------------------------------
+- Presentamos un sistema de recomendación sobre datos de Yelp: predecir la puntuación 1-5
+  que un usuario dará a un negocio
+- Métrica: MAE — queremos minimizar el error absoluto medio
+- El proyecto construye una arquitectura progresiva: partimos de modelos simples y vamos
+  añadiendo capas
+
+
+DIAPOSITIVA 2 — EL PROBLEMA: DATASET Y COLD START (60 seg — PA)
+-----------------------------------------------------------------
+- Dataset: ~1M reseñas de train, 414k de test, medio millón de usuarios únicos
+- La matriz usuario-negocio es extremadamente dispersa (densidad 0.000059) — la mayoría
+  de usuarios tiene muy pocas reseñas
+- Punto clave: el 41% de las filas de test pertenecen a usuarios sin ninguna reseña en train
+  → estos son "cold users", band 0
+- Este 41% es el problema central del proyecto — cualquier modelo que los ignore o los
+  maneje mal penaliza mucho el MAE global
+- También auditamos leakage: los campos average_stars de Yelp incluyen reseñas futuras
+  → no usables directamente como features, hay que recalcularlos solo desde train
+
+
+DIAPOSITIVA 3 — BASELINE CF: EL TECHO DEL FILTRADO COLABORATIVO (60 seg — PA)
+-------------------------------------------------------------------------------
+- Probamos 8 variantes de CF: desde media global hasta Bayesian PMF y ensambles
+- El mejor resultado es MAE ~0.69 con Bayesian PMF — y a partir de ahí el CF no mejora
+- ¿Por qué? Porque el CF no tiene información de contenido, y para el 41% cold directamente
+  predice la media global
+- Dato curioso: encontramos homofilia social — los amigos de Yelp se puntúan de forma más
+  similar que usuarios aleatorios (Δ MAE = 0.12). Pero solo el 43% de usuarios tienen amigos
+  en el dataset, así que no cubre a los cold users que más lo necesitan
+- Conclusión: el CF es un techo de referencia, no la solución. Los bias de CF (user_bias,
+  item_bias) los guardamos para usarlos más adelante
+
+
+DIAPOSITIVA 4 — REPRESENTACIÓN DE CONTENIDO + RAW_CORE (75 seg — PB)
+----------------------------------------------------------------------
+- Construimos una representación de negocio con 876 features: geo, categorías (558 features),
+  atributos, horario, priors recalculados desde train
+- Para el usuario: perfil centrado ponderado por rating (weight = rating − media del usuario)
+  — captura lo que le gusta más o menos que su media
+- Con esto entrenamos un LightGBM tabular sobre usuarios conocidos: val MAE = 0.6204
+- Esto ya supera al mejor CF en 0.07 — y solo con features tabulares
+- La feature más importante es user_average_stars del perfil Yelp, con más del 40% del gain.
+  Es legítima: está disponible en test porque Yelp la publica en el perfil del usuario
+- Este modelo se convierte en el incumbent — la barra que todos los modelos siguientes
+  intentan superar
+
+
+DIAPOSITIVA 5 — ROUTER POR BANDAS + COLD START (60 seg — PB)
+--------------------------------------------------------------
+- El raw_core solo funciona para usuarios conocidos. Para atacar el 41% cold construimos
+  un router por history_band
+- Segmentamos: band 0 (sin historial), band 1, 2-5, 6-20, >20 reseñas en train
+- Para band 0: 64 arquetipos K-Means sobre metadata del usuario (antigüedad, actividad
+  social) → cold model
+  - El baseline del cold model da MAE 1.16 — tenemos mucho margen de mejora aquí
+- Para band 6-20 añadimos un modelo adicional con features deep (prefix-deep)
+  — explicamos el por qué enseguida
+- Resultado del router completo: MAE global = 0.6265
+
+
+DIAPOSITIVA 6 — DEEP EMBEDDINGS Y CORRECTOR NEURAL (90 seg — PB)
+-----------------------------------------------------------------
+- Añadimos una capa neural: entrenamos un business tower que proyecta los 876 features
+  a 128 dimensiones densas, y un history encoder que aprende el embedding de cada usuario
+  a partir de sus reseñas pasadas
+- Con estos embeddings entrenamos el corrector neural v2_eval_v3 — arquitectura clave:
+  - Fórmula: predicción = incumbent + alpha × clamp(corrección, −scale, +scale)
+  - El alpha gate (0.72-0.82 según la banda) es el elemento crítico: acota cuánto puede
+    corregir el modelo
+  - Sin él el modelo hace overfitting en el primer epoch — lo vimos en los experimentos
+- Resultados por banda sobre usuarios conocidos:
+
+    Banda   |  Mejora MAE
+    --------|------------
+    2-5     |  −0.014
+    6-20    |  −0.016
+    >20     |  −0.010
+
+- MAE known-only: 0.6695 | MAE overall (incluyendo cold): 0.5999
+
+
+DIAPOSITIVA 7 — QUÉ NO FUNCIONÓ Y POR QUÉ (45 seg — PA)
+---------------------------------------------------------
+- Probamos quitar el alpha gate (predictor directo): overfitting inmediato en epoch 1
+  → descartado
+- Probamos Two-Tower con interacciones explícitas: peor en todas las bandas → descartado
+- Investigando el origen del problema encontramos la causa raíz: smooth_l1_loss está
+  desalineado con MAE — suaviza el gradiente cerca de cero, lo que genera oscilaciones
+  y early stopping prematuro
+- Corrección (Direction D): cambiar a l1_loss puro produce curvas de aprendizaje
+  monótonas y estables — confirma la hipótesis
+- La lección general: alinear la función de pérdida con la métrica objetivo es condición
+  necesaria
+
+
+DIAPOSITIVA 8 — META-STACKING: LA ÚLTIMA CAPA (60 seg — PA)
+-------------------------------------------------------------
+- Tenemos dos señales fuertes pero distintas: la predicción CB y los bias CF que
+  guardamos al principio
+- Entrenamos un meta-LightGBM de solo 3 features: cb_pred, user_bias, item_bias
+- Resultado: val MAE 0.6646 → LB MAE 0.6528 — mejor resultado del proyecto
+- Probamos añadir más features (19 en v4): prácticamente igual, 0.6529 en LB
+  — la simplicidad gana
+- Experimento que prueba el límite: v5 intentó un meta-modelo conjunto para todos los
+  usuarios incluyendo cold → MAE catastrófico 0.91 → confirma que el cold model es
+  irreemplazable desde fuera
+
+
+DIAPOSITIVA 9 — COMPARATIVA GLOBAL Y ARQUITECTURA FINAL (75 seg — PB)
+----------------------------------------------------------------------
+- El progreso completo:
+
+    Mean Baseline     0.82
+    Mejor CF          0.69   ← techo CF
+    raw_core          0.62   ← CB supera CF
+    Router global     0.6265 ← cold cubierto
+    Meta CF+CB        0.6528 ← mejor LB ★
+
+- La arquitectura final tiene 3 capas:
+    1. CB Router (LGBM): gestiona cold start y banda 6-20 con prefix-deep
+    2. Corrector neural (gated): corrección acotada para usuarios con historial
+    3. Meta-corrector CF+CB (LGBM, 3 features): recalibra con bias colaborativos
+- El modelo es interpretable en cada capa y cada decisión de diseño está justificada
+  empíricamente
+
+
+DIAPOSITIVA 10 — CONCLUSIONES (45 seg — PA y PB alternan)
+----------------------------------------------------------
+- PA: El cold start (41%) es el problema dominante — ningún meta-modelo externo puede
+  arreglarlo si el cold model es débil. Hay que atacarlo directamente
+- PB: El alpha gate no es arbitrario — es la diferencia entre un corrector estable y
+  overfitting inmediato
+- PA: La alineación loss-métrica importa: smooth_l1 funcionaba hasta cierto punto pero
+  l1_loss puro abre la puerta a mejores resultados futuros
+- PB: Trabajo futuro principal: mejorar band 2-5 (MAE 0.72, la mayor oportunidad), y
+  explorar un cold model más rico usando señal social cuando está disponible
+
+
+================================================================================
+TIMING ESTIMADO
+
+  Diapositiva 1  — Título             0:30   acumulado  0:30
+  Diapositiva 2  — Problema           1:00   acumulado  1:30
+  Diapositiva 3  — CF baseline        1:00   acumulado  2:30
+  Diapositiva 4  — raw_core           1:15   acumulado  3:45
+  Diapositiva 5  — Router             1:00   acumulado  4:45
+  Diapositiva 6  — Deep corrector     1:30   acumulado  6:15
+  Diapositiva 7  — Fallos + loss fix  0:45   acumulado  7:00
+  Diapositiva 8  — Meta-stacking      1:00   acumulado  8:00
+  Diapositiva 9  — Comparativa        1:15   acumulado  9:15
+  Diapositiva 10 — Conclusiones       0:45   acumulado 10:00
+
+Total: ~10 min. Margen hasta 12 min para pausas naturales o preguntas del tribunal.
+================================================================================
