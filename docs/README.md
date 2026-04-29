@@ -1,72 +1,70 @@
-# Documentacion Del Repositorio
+# Documentation
 
-## Estado Vigente
+## Current State
 
-La rama content-based ya no se describe solo por el deep export y el frozen regressor. El estado actual tambien incluye el router `lgbm_raw_router_prefix_deep_v1`, que es la referencia oficial hoy para la competencia.
+The content-based module now extends beyond the deep export and frozen regressor. The current state also includes the router `lgbm_raw_router_prefix_deep_v1`, which is the official competition reference today.
 
-- Proposito: indice maestro y punto de entrada canónico de la documentacion.
-- Tipo documental: `current`
-- Ultima actualizacion: `2026-04-11`
+- Purpose: master index and canonical entry point for the documentation
+- Document type: `current`
+- Last updated: `2026-04-11`
 
-## Como navegar esta documentacion
+## How to Navigate
 
-La documentacion canónica del repositorio vive en `docs/`.
+The canonical documentation lives in `docs/`. The repository and module `README.md` files are short entry hubs. Reference information, status, architecture, flows, proposals, and experiments are maintained here to avoid duplication.
 
-Los `README.md` del repositorio y de cada modulo son hubs de entrada cortos. La informacion de referencia, estado, arquitectura, flujos, propuestas y experimentos se mantiene aqui para evitar duplicacion.
+## Canonical Structure
 
-## Estructura canónica
+- [Documentation Standards](STANDARDS.md)
+- [Repository Map](overview/repository-map.md)
+- [Current State](status/current-state.md)
 
-- [Estándares Documentales](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/STANDARDS.md)
-- [Mapa Del Repositorio](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/overview/repository-map.md)
-- [Estado Actual](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/status/current-state.md)
+## Architecture
 
-## Arquitectura
+- [Content-Based Current Architecture](architecture/content-based-current.md)
+- [Decision Log](architecture/decision-log.md)
 
-- [Content-Based Actual](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/architecture/content-based-current.md)
-- [Decision Log](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/architecture/decision-log.md)
+## Flows
 
-## Flujos
+- [Content-Based Pipeline](flows/content-based-pipeline.md)
+- [Collaborative Filtering Workflow](flows/collaborative-filtering-workflow.md)
 
-- [Pipeline Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/flows/content-based-pipeline.md)
-- [Workflow Collaborative Filtering](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/flows/collaborative-filtering-workflow.md)
+## Training and Evaluation
 
-## Training Y Evaluacion
+- [Content-Based Deep User](training/content-based-deep-user.md)
+- [Content-Based Frozen Regressor](training/content-based-frozen-regressor.md)
+- [Content-Based LGBM Raw Router](training/content-based-lgbm-raw-router.md)
+- [Content-Based Two-Tower Router](training/content-based-known-user-two-tower-router.md)
 
-- [Deep User De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-deep-user.md)
-- [Frozen Regressor De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-frozen-regressor.md)
-- [LGBM Raw Router De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-router.md)
-- [Two-Tower Router De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-known-user-two-tower-router.md)
+## Reference
 
-## Referencia
+- [Content-Based Artifacts](reference/content-based-artifacts.md)
+- [Data Assets](reference/data-assets.md)
+- [Legacy Model Artifacts](reference/model-artifacts.md)
+- [Notebook Inventory](reference/notebooks.md)
+- [Collaborative Filtering Models](reference/collaborative-filtering-models.md)
+- [Collaborative Filtering Metrics](reference/collaborative-filtering-metrics.md)
+- [Collaborative Filtering Ensembles](reference/collaborative-filtering-ensemble.md)
+- [Collaborative Filtering Utils](reference/collaborative-filtering-utils.md)
 
-- [Artefactos De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/content-based-artifacts.md)
-- [Datasets Y Activos De Datos](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/data-assets.md)
-- [Artefactos De Modelos Legacy](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/model-artifacts.md)
-- [Inventario De Notebooks](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/notebooks.md)
-- [Modelos De Collaborative Filtering](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/collaborative-filtering-models.md)
-- [Metricas De Collaborative Filtering](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/collaborative-filtering-metrics.md)
-- [Ensembles De Collaborative Filtering](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/collaborative-filtering-ensemble.md)
-- [Utils De Collaborative Filtering](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/reference/collaborative-filtering-utils.md)
+## Experiments
 
-## Experimentos
+- [Official Run and Snapshot Registry](experiments/registry.md)
+- [Content-Based Deep User Log](experiments/content-based-deep-user-log.md)
+- [Raw Router Prefix Deep 2026-04-11](experiments/raw-router-prefix-deep-2026-04-11.md)
+- [Two-Tower Router 2026-04-12](experiments/two-tower-router-2026-04-12.md)
 
-- [Registro Oficial De Runs Y Snapshots](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/registry.md)
-- [Log Deep User De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/content-based-deep-user-log.md)
-- [Raw Router Prefix Deep 2026-04-11](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/raw-router-prefix-deep-2026-04-11.md)
-- [Two-Tower Router 2026-04-12](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/experiments/two-tower-router-2026-04-12.md)
+## Proposals
 
-## Propuestas
+- [Content-Based Interaction-First](proposals/content-based-interaction-first.md)
+- [Content-Based Next Ideas](proposals/content-based-next-ideas.md)
 
-- [Content-Based Interaction-First](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/proposals/content-based-interaction-first.md)
-- [Siguientes Ideas De Content-Based](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/proposals/content-based-next-ideas.md)
+## Document Type Convention
 
-## Convencion De Tipos Documentales
+- `current`: describes what exists today and is considered active
+- `reference`: describes contracts, inventories, assets, or APIs
+- `experiment`: records iterations, results, or run recommendations
+- `proposal`: documents ideas or changes not yet implemented
 
-- `current`: describe lo que existe hoy y se considera vigente.
-- `reference`: describe contratos, inventarios, activos o APIs.
-- `experiment`: registra iteraciones, resultados o recomendaciones de runs.
-- `proposal`: documenta ideas o cambios aun no implementados.
+## Main Rule
 
-## Regla Principal
-
-Si un dato solo puede mantenerse en un sitio sin riesgo de incoherencia, ese sitio debe ser `docs/` y no un `README.md`.
+If a piece of data can only be maintained in one place without risk of inconsistency, that place must be `docs/` and not a `README.md`.

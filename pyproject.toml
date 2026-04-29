@@ -1,7 +1,7 @@
 [project]
 name = "sistemas-recomendacion"
 version = "0.1.0"
-description = "Add your description here"
+description = "Rating prediction system combining collaborative filtering and content-based deep learning pipelines on a Yelp-derived dataset."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [

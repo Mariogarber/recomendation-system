@@ -1,18 +1,16 @@
 # Content-Based
 
-> Estado documental: este archivo pasa a ser un hub corto y legacy-friendly.
->
-> La documentacion canónica del modulo vive en:
-> - [docs/architecture/content-based-current.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/architecture/content-based-current.md)
-> - [docs/flows/content-based-pipeline.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/flows/content-based-pipeline.md)
-> - [docs/training/content-based-deep-user.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-deep-user.md)
-> - [docs/training/content-based-frozen-regressor.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-frozen-regressor.md)
-> - [docs/training/content-based-gbm-blend.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-gbm-blend.md)
-> - [docs/training/content-based-lgbm-raw-features.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-features.md)
-> - [docs/training/content-based-lgbm-deep-embeddings.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-deep-embeddings.md)
-> - [docs/training/content-based-lgbm-raw-router.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-raw-router.md)
-> - [docs/training/content-based-lgbm-feature-first-short-router.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-lgbm-feature-first-short-router.md)
-> - [docs/status/current-state.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/status/current-state.md)
+> This file is a short entry hub for the module. Canonical documentation lives in:
+> - [docs/architecture/content-based-current.md](../docs/architecture/content-based-current.md)
+> - [docs/flows/content-based-pipeline.md](../docs/flows/content-based-pipeline.md)
+> - [docs/training/content-based-deep-user.md](../docs/training/content-based-deep-user.md)
+> - [docs/training/content-based-frozen-regressor.md](../docs/training/content-based-frozen-regressor.md)
+> - [docs/training/content-based-gbm-blend.md](../docs/training/content-based-gbm-blend.md)
+> - [docs/training/content-based-lgbm-raw-features.md](../docs/training/content-based-lgbm-raw-features.md)
+> - [docs/training/content-based-lgbm-deep-embeddings.md](../docs/training/content-based-lgbm-deep-embeddings.md)
+> - [docs/training/content-based-lgbm-raw-router.md](../docs/training/content-based-lgbm-raw-router.md)
+> - [docs/training/content-based-lgbm-feature-first-short-router.md](../docs/training/content-based-lgbm-feature-first-short-router.md)
+> - [docs/status/current-state.md](../docs/status/current-state.md)
 
 This document is the living documentation for the `content-based/` module. It reflects what is implemented today, how the manual and deep embedding families are built, and what the current report can and cannot prove.
 
@@ -67,15 +65,15 @@ Current router policy:
 Latest short-history diagnostic and ablation context:
 
 - deep short-band diagnostic:
-  - [`content-based/artifacts/known_user_short_band_diagnostic_v1/report.md`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_short_band_diagnostic_v1/report.md)
+  - [`content-based/artifacts/known_user_short_band_diagnostic_v1/report.md`](./artifacts/known_user_short_band_diagnostic_v1/report.md)
 - latest feature-first GPU run:
-  - [`content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/validation_summary.json`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/validation_summary.json)
+  - [`content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/validation_summary.json`](./artifacts/lgbm_feature_first_short_router_v1_gpu/validation_summary.json)
 - short-history comparison vs deep `v3`:
-  - [`content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/short_history_vs_v3.csv`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/short_history_vs_v3.csv)
+  - [`content-based/artifacts/lgbm_feature_first_short_router_v1_gpu/short_history_vs_v3.csv`](./artifacts/lgbm_feature_first_short_router_v1_gpu/short_history_vs_v3.csv)
 
 Current recommendation after those runs:
 
-- keep [`known_user_deep_router_v2_eval_v3`](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/known_user_deep_router_v2_eval_v3) as the stable short-history reference
+- keep [`known_user_deep_router_v2_eval_v3`](./artifacts/known_user_deep_router_v2_eval_v3) as the stable short-history reference
 - keep `lgbm_feature_first_short_router_v1_gpu` as a documented ablation only
 - do not promote the feature-first run to submission, because it improves the global tabular MAE slightly but loses clearly in `2-5` against the deep `v3` snapshot
 
@@ -83,17 +81,17 @@ The previous `lgbm_raw_router_v1` remains the historical baseline for comparison
 
 See also:
 
-- [Plan](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/PLAN.md)
-- [Technical Checklist](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/TECHNICAL_CHECKLIST.md)
-- [Project Status](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/project-status.md)
-- [Feature Guide](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-features-guide.md)
-- [Embedding Quality Report Guide](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/embedding_quality_report_guide.md)
-- [Deep User Embeddings RFC](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-rfc.md)
-- [Deep User Embeddings Dataflow](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-dataflow.md)
-- [Deep User Embeddings Experiments](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-experiments.md)
-- [Deep User Model Flow](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-model-flow.md)
-- [Frozen Embedding Regressor](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-frozen-embedding-regressor.md)
-- [GBM Blend Training Note](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/training/content-based-gbm-blend.md)
+- [Plan](./PLAN.md)
+- [Technical Checklist](./TECHNICAL_CHECKLIST.md)
+- [Project Status](../docs/project-status.md)
+- [Feature Guide](../docs/content-based-features-guide.md)
+- [Embedding Quality Report Guide](../docs/embedding_quality_report_guide.md)
+- [Deep User Embeddings RFC](../docs/content-based-deep-user-embeddings-rfc.md)
+- [Deep User Embeddings Dataflow](../docs/content-based-deep-user-embeddings-dataflow.md)
+- [Deep User Embeddings Experiments](../docs/content-based-deep-user-embeddings-experiments.md)
+- [Deep User Model Flow](../docs/content-based-deep-user-model-flow.md)
+- [Frozen Embedding Regressor](../docs/content-based-frozen-embedding-regressor.md)
+- [GBM Blend Training Note](../docs/training/content-based-gbm-blend.md)
 
 ## Current Competition Submission Path
 
@@ -190,7 +188,7 @@ This supports the design choice of making business representation the core of th
 
 File:
 
-- [io.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/io.py)
+- [io.py](./utils/io.py)
 
 Responsibilities:
 
@@ -201,7 +199,7 @@ Responsibilities:
 
 File:
 
-- [split.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/split.py)
+- [split.py](./utils/split.py)
 
 Responsibilities:
 
@@ -213,7 +211,7 @@ Responsibilities:
 
 File:
 
-- [audit.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/audit.py)
+- [audit.py](./utils/audit.py)
 
 Responsibilities:
 
@@ -225,7 +223,7 @@ Responsibilities:
 
 File:
 
-- [business_features.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/business_features.py)
+- [business_features.py](./utils/business_features.py)
 
 Responsibilities:
 
@@ -242,8 +240,8 @@ Examples of supported nested keys:
 
 Files:
 
-- [business_representation.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/business_representation.py)
-- [build_business_representation.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_business_representation.py)
+- [business_representation.py](./utils/business_representation.py)
+- [build_business_representation.py](./build_business_representation.py)
 
 This is the main business-side representation used by both the manual and deep user pipelines.
 
@@ -292,8 +290,8 @@ Validation checks currently passing:
 
 Files:
 
-- [user_representation.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/user_representation.py)
-- [build_user_representation.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_user_representation.py)
+- [user_representation.py](./utils/user_representation.py)
+- [build_user_representation.py](./build_user_representation.py)
 
 This builder creates one row per train user and separates two blocks:
 
@@ -364,9 +362,9 @@ Current metadata coverage note:
 
 Files:
 
-- [deep_user_embeddings.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/deep_user_embeddings.py)
-- [build_competition_embeddings.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/build_competition_embeddings.py)
-- [analyze_embeddings_report.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/analyze_embeddings_report.py)
+- [deep_user_embeddings.py](./utils/deep_user_embeddings.py)
+- [build_competition_embeddings.py](./build_competition_embeddings.py)
+- [analyze_embeddings_report.py](./analyze_embeddings_report.py)
 
 This pipeline is implemented and exports a second family of user embeddings:
 
@@ -388,18 +386,18 @@ The deep pipeline:
 
 Latest iterative search on the current codebase:
 
-- recommended exported embedding bundle: [competition_embeddings_v3_iter03](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v3_iter03)
-- recommended training-head reference bundle: [competition_embeddings_v3_iter04](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v3_iter04)
-- detailed loop notes: [content-based-deep-user-embeddings-experiments.md](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-deep-user-embeddings-experiments.md)
+- recommended exported embedding bundle: [competition_embeddings_v3_iter03](./artifacts/competition_embeddings_v3_iter03)
+- recommended training-head reference bundle: [competition_embeddings_v3_iter04](./artifacts/competition_embeddings_v3_iter04)
+- detailed loop notes: [content-based-deep-user-embeddings-experiments.md](../docs/content-based-deep-user-embeddings-experiments.md)
 - the report now separates `utility_honest_validation.csv` from `utility_post_export_diagnostics.csv`
 
 ### Downstream Frozen Regressor
 
 Files:
 
-- [train_frozen_embedding_regressor.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/train_frozen_embedding_regressor.py)
-- [frozen_embedding_regressor.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/model/frozen_embedding_regressor.py)
-- [frozen_embedding_regression.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/utils/frozen_embedding_regression.py)
+- [train_frozen_embedding_regressor.py](./train_frozen_embedding_regressor.py)
+- [frozen_embedding_regressor.py](./model/frozen_embedding_regressor.py)
+- [frozen_embedding_regression.py](./utils/frozen_embedding_regression.py)
 
 This downstream pipeline is now implemented.
 
@@ -415,31 +413,31 @@ It trains a rating regressor on top of:
 
 Current references:
 
-- diagnostic run only: [frozen_embedding_regressor_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_regressor_v1)
-- honest held-out run: [frozen_embedding_regressor_honest_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_regressor_honest_v1)
+- diagnostic run only: [frozen_embedding_regressor_v1](./artifacts/frozen_embedding_regressor_v1)
+- honest held-out run: [frozen_embedding_regressor_honest_v1](./artifacts/frozen_embedding_regressor_honest_v1)
 
 Current status:
 
 - the downstream scorer is implemented and reproducible
 - a full-train competition submission flow is implemented on top of the best leaky downstream run
 - the honest run does not yet beat the Ridge baseline on `MAE`
-- the honest baseline and the best trainable run are documented in [Frozen Embedding Regressor](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/docs/content-based-frozen-embedding-regressor.md)
-- the current competition submission artifact is [frozen_embedding_submission_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_submission_v1)
-- the final rounded CSV is [submission.csv](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_submission_v1/submission.csv)
+- the honest baseline and the best trainable run are documented in [Frozen Embedding Regressor](../docs/content-based-frozen-embedding-regressor.md)
+- the current competition submission artifact is [frozen_embedding_submission_v1](./artifacts/frozen_embedding_submission_v1)
+- the final rounded CSV is [submission.csv](./artifacts/frozen_embedding_submission_v1/submission.csv)
 
 ### Competition Submission Flow
 
 Files:
 
-- [train_frozen_embedding_submission_model.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/train_frozen_embedding_submission_model.py)
-- [predict_frozen_embedding_submission.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/predict_frozen_embedding_submission.py)
+- [train_frozen_embedding_submission_model.py](./train_frozen_embedding_submission_model.py)
+- [predict_frozen_embedding_submission.py](./predict_frozen_embedding_submission.py)
 
 This flow is intentionally competition-oriented and uses the original full embedding exports.
 
 Current default:
 
 - source run: `iter04_with_review`
-- embedding bundle: [competition_embeddings_v3_iter04](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v3_iter04)
+- embedding bundle: [competition_embeddings_v3_iter04](./artifacts/competition_embeddings_v3_iter04)
 - final full-train epochs: `18`
 - review-context enabled: `true`
 
@@ -454,7 +452,7 @@ Predictions are clipped to `[1, 5]` and rounded before export.
 
 File:
 
-- [base.py](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/model/base.py)
+- [base.py](./model/base.py)
 
 Purpose:
 
@@ -567,10 +565,10 @@ Purpose:
 
 Example artifact directories already generated:
 
-- [business_repr_v1_smoke](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/business_repr_v1_smoke)
-- [user_repr_v1_smoke](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/user_repr_v1_smoke)
-- [competition_embeddings_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/competition_embeddings_v1)
-- [frozen_embedding_submission_v1](/C:/Users/mario/OneDrive/Documentos/UPM/Master_Data/Sistemas_recomendacion/recomendation-system/content-based/artifacts/frozen_embedding_submission_v1)
+- [business_repr_v1_smoke](./artifacts/business_repr_v1_smoke)
+- [user_repr_v1_smoke](./artifacts/user_repr_v1_smoke)
+- [competition_embeddings_v1](./artifacts/competition_embeddings_v1)
+- [frozen_embedding_submission_v1](./artifacts/frozen_embedding_submission_v1)
 
 Files produced by the business representation builder:
 
